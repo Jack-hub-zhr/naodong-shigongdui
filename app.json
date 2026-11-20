@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "脑洞施工",
+    "slug": "naodong-shigongdui",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "naodong",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.naodongshigong.app",
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "脑洞施工队到达裁决点或交付时提醒你验收"
+      }
+    },
+    "android": {
+      "package": "com.naodongshigong.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#141B26",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "脑洞施工",
+      "shortName": "脑洞施工",
+      "themeColor": "#FFB800",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#141B26",
+          "imageWidth": 220
+        }
+      ],
+      "expo-notifications",
+      "expo-sharing"
+    ]
+  }
+}
