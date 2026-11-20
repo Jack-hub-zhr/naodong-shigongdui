@@ -85,7 +85,9 @@ export function ConstructionScreen() {
     : COPY.construction.pausedBody;
   const isPaused = project.status === 'PAUSED';
   const isAwaiting = project.status === 'AWAITING_USER';
-  const providerName = project.lastProvider ? PROVIDERS[project.lastProvider].name : null;
+  const providerName = project.lastProvider
+    ? PROVIDERS[project.lastProvider]?.name ?? '免费通道'
+    : null;
 
   const pageContent = (
     <>
