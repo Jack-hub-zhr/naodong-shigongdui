@@ -244,7 +244,7 @@ export const COPY = {
     quotaBackoff: (provider: string, delay: number) => `系统：${provider} 触发限流，${(delay / 1000).toFixed(0)}s 后重试`,
     failover: (from: string, to: string, reason: string) => `系统：${from} 不可用（${reason}），切换到 ${to}`,
     demoEngine: '系统：演示模式已开启，施工队使用预置脚本',
-    realEngine: '系统：真实 API 模式，按角色路由到免费模型',
+    realEngine: '系统：真实 API 模式，四个工种统一走 DeepSeek',
     providerDone: (provider: string, role: string) => `系统：${role}调用 ${provider} 完成`,
     configMissing: '系统：未配置任何 API Key，请在 .env 中填入后重启',
     simQuota: '系统：已模拟今日额度用尽（演示用）',
