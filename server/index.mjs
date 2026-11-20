@@ -5,6 +5,8 @@ import { extname, join, normalize, resolve } from 'node:path';
 const PORT = Number.parseInt(process.env.PORT ?? '3000', 10);
 const DIST_DIR = resolve(process.cwd(), 'dist');
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+const FREE_URL = process.env.FREE_BASE_URL?.trim() || 'https://text.pollinations.ai/openai';
+const FREE_MODEL = process.env.FREE_MODEL?.trim() || 'openai';
 const MAX_BODY_BYTES = 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 75_000;
 const MAX_RETRIES = 3;
@@ -195,7 +197,31 @@ function validateCompletionRequest(body) {
 }
 
 function timeoutError() {
-  return new ApiError(504, 'NETWORK', 'DeepSeek 请求超时');
+  return new ApiError(504, 'NETWORK', '模型请求超时');
+}
+
+function activeProvider() {
+  const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
+  if (deepseekKey) {
+    return {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      family: 'DeepSeek',
+      model: 'deepseek-chat',
+      url: DEEPSEEK_URL,
+      key: deepseekKey,
+      jsonMode: true,
+    };
+  }
+  return {
+    id: 'free',
+    name: '免费通道',
+    family: 'GPT-OSS',
+    model: FREE_MODEL,
+    url: FREE_URL,
+    key: null,
+    jsonMode: false,
+  };
 }
 
 function waitForBackoff(attempt, signal) {
@@ -215,7 +241,8 @@ function waitForBackoff(attempt, signal) {
   });
 }
 
-async function completeWithDeepSeek(input, apiKey) {
+async function completeUpstream(input) {
+  const provider = activeProvider();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
@@ -224,22 +251,22 @@ async function completeWithDeepSeek(input, apiKey) {
       let response;
       let raw;
       try {
-        response = await fetch(DEEPSEEK_URL, {
+        response = await fetch(provider.url, {
           method: 'POST',
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
+            ...(provider.key ? { Authorization: `Bearer ${provider.key}` } : {}),
           },
           body: JSON.stringify({
-            model: 'deepseek-chat',
+            model: provider.model,
             messages: [
               { role: 'system', content: input.system },
               { role: 'user', content: input.user },
             ],
             temperature: input.temperature,
             max_tokens: input.maxTokens,
-            ...(input.json ? { response_format: { type: 'json_object' } } : {}),
+            ...(input.json && provider.jsonMode ? { response_format: { type: 'json_object' } } : {}),
           }),
           redirect: 'error',
           signal: controller.signal,
@@ -248,7 +275,7 @@ async function completeWithDeepSeek(input, apiKey) {
       } catch {
         if (controller.signal.aborted) throw timeoutError();
         if (attempt === MAX_RETRIES) {
-          throw new ApiError(502, 'NETWORK', '无法连接 DeepSeek 服务');
+          throw new ApiError(502, 'NETWORK', `无法连接 ${provider.name}`);
         }
         await waitForBackoff(attempt, controller.signal);
         continue;
@@ -259,28 +286,28 @@ async function completeWithDeepSeek(input, apiKey) {
         try {
           payload = JSON.parse(raw);
         } catch {
-          throw new ApiError(502, 'PARSE', 'DeepSeek 返回了无效 JSON');
+          throw new ApiError(502, 'PARSE', `${provider.name} 返回了无效 JSON`);
         }
 
         const text = payload?.choices?.[0]?.message?.content;
         if (typeof text !== 'string' || !text.trim()) {
-          throw new ApiError(502, 'PARSE', 'DeepSeek 返回了空响应或无效结构');
+          throw new ApiError(502, 'PARSE', `${provider.name} 返回了空响应或无效结构`);
         }
 
         return {
           text,
-          provider: 'deepseek',
-          providerName: 'DeepSeek',
-          family: 'DeepSeek',
-          model: 'deepseek-chat',
+          provider: provider.id,
+          providerName: provider.name,
+          family: provider.family,
+          model: provider.model,
         };
       }
 
       if (response.status === 401 || response.status === 403) {
-        throw new ApiError(502, 'AUTH', 'DeepSeek 密钥无效或无权限');
+        throw new ApiError(502, 'AUTH', `${provider.name} 密钥无效或无权限`);
       }
       if (response.status === 402) {
-        throw new ApiError(402, 'QUOTA', 'DeepSeek 账户余额不足');
+        throw new ApiError(402, 'QUOTA', `${provider.name} 账户余额不足`);
       }
 
       const retryable = response.status === 429 || response.status >= 500;
@@ -289,15 +316,15 @@ async function completeWithDeepSeek(input, apiKey) {
         continue;
       }
       if (response.status === 429) {
-        throw new ApiError(429, 'RATE_LIMIT', 'DeepSeek 请求限流，请稍后重试');
+        throw new ApiError(429, 'RATE_LIMIT', `${provider.name} 请求限流，请稍后重试`);
       }
-      throw new ApiError(502, 'HTTP', `DeepSeek 返回 HTTP ${response.status}`);
+      throw new ApiError(502, 'HTTP', `${provider.name} 返回 HTTP ${response.status}`);
     }
   } finally {
     clearTimeout(timeout);
   }
 
-  throw new ApiError(502, 'NETWORK', 'DeepSeek 请求失败');
+  throw new ApiError(502, 'NETWORK', '模型请求失败');
 }
 
 const MIME_TYPES = {
@@ -383,11 +410,13 @@ async function handleRequest(req, res) {
     if (req.method !== 'GET') {
       throw new ApiError(405, 'HTTP', '请求方法不允许', { Allow: 'GET' });
     }
+    const provider = activeProvider();
     sendJson(res, 200, {
       ok: true,
-      configured: Boolean(process.env.DEEPSEEK_API_KEY?.trim()),
-      model: 'deepseek-chat',
-      provider: 'deepseek',
+      configured: true,
+      provider: provider.id,
+      providerName: provider.name,
+      model: provider.model,
     });
     return;
   }
@@ -399,14 +428,8 @@ async function handleRequest(req, res) {
 
     checkRateLimit(req);
 
-    const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-    if (!apiKey) {
-      req.resume();
-      throw new ApiError(503, 'NO_KEY', '服务端未配置 DEEPSEEK_API_KEY');
-    }
-
     const input = validateCompletionRequest(await readJson(req));
-    const result = await completeWithDeepSeek(input, apiKey);
+    const result = await completeUpstream(input);
     sendJson(res, 200, result);
     return;
   }
