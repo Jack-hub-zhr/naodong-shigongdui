@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { radius, type ThemeColors } from '../theme';
 import { useTheme, useThemedStyles } from '../state/ThemeProvider';
+
+const MIN_FRAME_HEIGHT = 280;
+const MAX_FRAME_HEIGHT = 820;
 
 // 原生端用 WebView 预览成品；Web 端用 iframe（两者互不打包执行）
 const NativeWebView: any =
@@ -32,9 +35,53 @@ const STORAGE_SHIM = `<script>
     } catch (error) {
       try {
         Object.defineProperty(window, name, { configurable: true, value: memoryStorage() });
-      } catch (ignored) {}
+      } catch (ignored) {
+        try {
+          Object.defineProperty(Window.prototype, name, { configurable: true, get: function () { return memoryStorage(); } });
+        } catch (ignoredToo) {}
+      }
     }
   });
+
+  // 把内容真实高度告诉外层，避免开始按钮被压在预览框可视区域之外
+  function reportHeight() {
+    try {
+      var body = document.body;
+      var root = document.documentElement;
+      if (!body) return;
+      // 暂时取消 100% / flex 拉伸，量到内容本身的高度，避免随预览框无限增高
+      var saved = {
+        rootMin: root.style.minHeight,
+        bodyMin: body.style.minHeight,
+        bodyHeight: body.style.height,
+        bodyDisplay: body.style.display
+      };
+      root.style.minHeight = '0';
+      body.style.minHeight = '0';
+      body.style.height = 'auto';
+      body.style.display = 'block';
+      var height = Math.ceil(body.scrollHeight);
+      root.style.minHeight = saved.rootMin;
+      body.style.minHeight = saved.bodyMin;
+      body.style.height = saved.bodyHeight;
+      body.style.display = saved.bodyDisplay;
+      if (height > 0) window.parent.postMessage({ type: '__nd_frame_height', height: height }, '*');
+    } catch (error) {}
+  }
+  reportHeight();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', reportHeight);
+  } else {
+    setTimeout(reportHeight, 0);
+  }
+  window.addEventListener('load', reportHeight);
+  try {
+    if (window.ResizeObserver) new ResizeObserver(reportHeight).observe(document.documentElement);
+  } catch (error) {}
+  setTimeout(reportHeight, 400);
+  setTimeout(reportHeight, 1200);
+  setTimeout(reportHeight, 2600);
+  document.addEventListener('click', function () { setTimeout(reportHeight, 120); }, true);
 })();
 </script>`;
 
@@ -54,11 +101,32 @@ export function PreviewFrame({
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState(height);
+
+  useEffect(() => {
+    setFrameHeight(height);
+  }, [html, height]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const onMessage = (event: MessageEvent) => {
+      if (!frameRef.current || event.source !== frameRef.current.contentWindow) return;
+      const payload = event.data as { type?: string; height?: number } | null;
+      if (!payload || payload.type !== '__nd_frame_height') return;
+      const next = Number(payload.height);
+      if (!Number.isFinite(next) || next <= 0) return;
+      setFrameHeight(Math.min(Math.max(Math.round(next), MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT));
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.wrap, { height }]}>
+      <View style={[styles.wrap, { height: frameHeight }]}>
         {React.createElement('iframe' as any, {
+          ref: frameRef,
           srcDoc: withPreviewShim(html),
           title: '成品预览',
           sandbox: 'allow-scripts allow-forms allow-modals allow-popups',
