@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "naodong",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.naodongshigong.app",
@@ -27,7 +27,8 @@
       "favicon": "./assets/favicon.png",
       "name": "脑洞施工",
       "shortName": "脑洞施工",
-      "themeColor": "#FFB800",
+      "themeColor": "#FFC53D",
+      "backgroundColor": "#060A14",
       "bundler": "metro"
     },
     "plugins": [

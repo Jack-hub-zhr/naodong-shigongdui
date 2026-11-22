@@ -9,7 +9,7 @@ import {
   type ThemeMode,
 } from '../theme';
 
-const STORAGE_KEY = 'naodong.theme.v1';
+const STORAGE_KEY = 'naodong.theme.v2';
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -21,7 +21,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<ThemeMode>('system');
+  const [mode, setModeState] = useState<ThemeMode>('dark');
   const [systemScheme, setSystemScheme] = useState<ResolvedTheme>(
     Appearance.getColorScheme() === 'dark' ? 'dark' : 'light',
   );

@@ -40,7 +40,15 @@ export function builderSystemPrompt(): string {
 4. 为 4 条验收标准分别在最相关的元素上加 data-acceptance="A1"…"A4"
 5. 不引用外部 JS/CSS/字体/图片；不出现 TODO、lorem ipsum、undefined
 6. 所有链接使用 # 或 https 地址，不允许空 href
-7. 文案用中文，视觉完成度要高，不要占位骨架`;
+7. 文案用中文，视觉完成度要高，不要占位骨架
+8. localStorage、sessionStorage、navigator.clipboard、AudioContext 等可能被浏览器沙箱禁止的 API，必须写在 try/catch 里，或先判断可用性；绝不能让一次异常中断整个脚本
+9. 所有按钮必须真实可用：点击后要有可见状态变化（分数、倒计时、文案、面板切换），不能只是空函数
+
+如果是小游戏，额外要求：
+10. 「开始 / 暂停 / 重开」必须是独立的 <button type="button">，放在游戏画布或游戏区域之外的正下方，与游戏区至少间隔 16px；禁止用绝对定位压在游戏区上方遮挡玩法
+11. 点击开始后必须真正进入可玩状态：倒计时开始走动、按钮文案变为「暂停」，再次点击可暂停；结束后给出结算并可重开
+12. 若用 <canvas>，点击坐标必须按 getBoundingClientRect() 的实际显示尺寸换算，并给画布设置 touch-action:none；若用 DOM 元素做游戏区，命中目标必须能被真实点击
+13. 游戏区高度固定且自适应宽度，不能因为内容为空而塌缩成 0 高度`;
 }
 
 export function builderUserPrompt(args: {

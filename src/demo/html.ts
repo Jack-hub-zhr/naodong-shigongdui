@@ -114,8 +114,8 @@ function gameBody(opts: {
     <button type="button" id="target" aria-label="点击得分" style="position:absolute;left:40%;top:40%;background:var(--a);color:#181200;font-weight:900;border-radius:999px;width:74px;height:74px;padding:0">点我</button>
     <span class="muted" id="hint">点「开始」后，60 秒内尽量多点中</span>
   </div>
-  <button type="button" class="primary" id="start">开始 60 秒</button>
-  ${full ? `<div class="row" style="margin-top:10px"><button type="button" class="ghost" id="restart" data-acceptance="A2">重开一局</button><span class="muted" style="align-self:center">空格键也能开始 / 暂停</span></div>
+  <button type="button" class="primary" id="start" style="margin-top:16px">开始 60 秒</button>
+  ${full ? `<div class="row" style="margin-top:14px"><button type="button" class="ghost" id="restart" data-acceptance="A2">重开一局</button><span class="muted" style="align-self:center">空格键也能开始 / 暂停</span></div>
   <div style="height:0;overflow:hidden" data-acceptance="A3">键盘空格支持</div>` : ''}
   <div class="card" style="margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7">
     <div data-acceptance="A4">倒计时归零会自动结算，最高分保存在本机。</div>
@@ -124,12 +124,14 @@ function gameBody(opts: {
 
   const script = `
 (function(){
-  var score=0,combo=1,time=60,running=false,left=0,timer=null,best=Number(localStorage.getItem('nd_best')||0);
+  function readBest(){try{return Number(localStorage.getItem('nd_best')||0)||0;}catch(e){return 0;}}
+  function writeBest(v){try{localStorage.setItem('nd_best',String(v));}catch(e){}}
+  var score=0,combo=1,time=60,running=false,left=0,timer=null,best=readBest();
   var scoreEl=document.getElementById('score'),timeEl=document.getElementById('time'),comboEl=document.getElementById('combo'),target=document.getElementById('target'),start=document.getElementById('start'),hint=document.getElementById('hint');
   var bold=${bold ? 'true' : 'false'};
   function paint(){scoreEl.textContent=score;timeEl.textContent=Math.ceil(time);comboEl.textContent='x'+combo;}
   function move(){var w=target.parentElement.clientWidth-84,h=target.parentElement.clientHeight-84;target.style.left=Math.max(6,Math.random()*w)+'px';target.style.top=Math.max(6,Math.random()*h)+'px';}
-  function stop(){running=false;clearInterval(timer);start.textContent='再来 60 秒';hint.textContent='本局得分 '+score+(score>best?' · 新纪录！':' · 最高 '+Math.max(best,score));if(score>best){best=score;localStorage.setItem('nd_best',String(best));}}
+  function stop(){running=false;clearInterval(timer);start.textContent='再来 60 秒';hint.textContent='本局得分 '+score+(score>best?' · 新纪录！':' · 最高 '+Math.max(best,score));if(score>best){best=score;writeBest(best);}}
   function tick(){time-=0.1;if(time<=0){time=0;paint();stop();return;}paint();}
   function begin(){if(running){running=false;clearInterval(timer);start.textContent='继续';return;}running=true;start.textContent='暂停';clearInterval(timer);timer=setInterval(tick,100);}
   target.addEventListener('click',function(){
@@ -178,10 +180,11 @@ function toolBody(opts: {
 (function(){
   var total=25*60,left=total,running=false,timer=null;
   var clock=document.getElementById('clock'),toggle=document.getElementById('toggle'),input=document.getElementById('taskInput'),list=document.getElementById('list'),empty=document.getElementById('empty'),done=document.getElementById('done');
-  var tasks=JSON.parse(localStorage.getItem('nd_tasks')||'[]');
+  var tasks=readTasks();
   function fmt(s){var m=Math.floor(s/60),ss=s%60;return (m<10?'0':'')+m+':'+(ss<10?'0':'')+ss;}
   function paint(){clock.textContent=fmt(left);}
-  function save(){localStorage.setItem('nd_tasks',JSON.stringify(tasks));}
+  function readTasks(){try{var raw=localStorage.getItem('nd_tasks');var parsed=raw?JSON.parse(raw):[];return Array.isArray(parsed)?parsed:[];}catch(e){return [];}}
+  function save(){try{localStorage.setItem('nd_tasks',JSON.stringify(tasks));}catch(e){}}
   function render(){
     list.innerHTML='';
     tasks.forEach(function(t,i){
@@ -269,7 +272,7 @@ function automationBody(opts: { spec: Spec; full: boolean }): { body: string; sc
   document.getElementById('sample').addEventListener('click',function(){
     input.value='今天把脑洞施工队的验收台改完了\\n用户只需要在两个方案里做选择\\n返工单会自动回退到最近决策点';
   });
-  ${full ? "document.getElementById('copy').addEventListener('click',function(){var t=out.textContent||'';if(navigator.clipboard){navigator.clipboard.writeText(t);}out.textContent=t+'\\n\\n（已复制）';});\n  document.getElementById('clear').addEventListener('click',function(){input.value='';out.textContent='等待执行…';input.focus();});" : ''}
+  ${full ? "document.getElementById('copy').addEventListener('click',function(){var t=out.textContent||'';try{if(navigator.clipboard){navigator.clipboard.writeText(t).catch(function(){});}}catch(e){}out.textContent=t+'\\n\\n（已复制）';});\n  document.getElementById('clear').addEventListener('click',function(){input.value='';out.textContent='等待执行…';input.focus();});" : ''}
 })();`;
   return { body, script };
 }
@@ -287,9 +290,10 @@ function boardBody(opts: { spec: Spec; full: boolean }): { body: string; script:
 
   const script = `
 (function(){
-  var ideas=${full ? "JSON.parse(localStorage.getItem('nd_board')||'[]')" : '[]'};
+  var ideas=${full ? "readIdeas()" : '[]'};
   var board=document.getElementById('board'),empty=document.getElementById('empty'),input=document.getElementById('ideaInput');
-  function save(){${full ? "localStorage.setItem('nd_board',JSON.stringify(ideas));" : ''}}
+  function readIdeas(){try{var raw=localStorage.getItem('nd_board');var parsed=raw?JSON.parse(raw):[];return Array.isArray(parsed)?parsed:[];}catch(e){return [];}}
+  function save(){${full ? "try{localStorage.setItem('nd_board',JSON.stringify(ideas));}catch(e){}" : ''}}
   function render(){
     board.innerHTML='';
     ideas.forEach(function(text,i){
