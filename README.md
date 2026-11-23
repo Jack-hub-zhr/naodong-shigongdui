@@ -2,6 +2,8 @@
 
 > One idea in. A crew ships it. · 一瞬脑洞，Agent 施工队试错到验收。
 
+**线上体验：https://forgecrew-studio.onrender.com**（UI 静态站）· API 由 Render 服务端托管（`/api/complete`）。
+
 用户只写一句话，施工队（多 Agent）在后台拆解、生成、程序化审查、返工，只在 2—3 个裁决点停下来让用户点一下。交付时附一份「取悦声明」，逐条对照用户原话。
 
 - 技术栈：React Native 0.88 + Expo SDK 58 + TypeScript
