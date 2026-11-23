@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "脑洞施工",
-    "slug": "naodong-shigongdui",
+    "name": "ForgeCrew",
+    "slug": "forgecrew",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "naodong",
+    "scheme": "forgecrew",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.naodongshigong.app",
       "infoPlist": {
-        "NSUserNotificationsUsageDescription": "脑洞施工队到达裁决点或交付时提醒你验收"
+        "NSUserNotificationsUsageDescription": "ForgeCrew 到达裁决点或交付时提醒你验收"
       }
     },
     "android": {
@@ -25,8 +25,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "脑洞施工",
-      "shortName": "脑洞施工",
+      "name": "ForgeCrew",
+      "shortName": "ForgeCrew",
       "themeColor": "#FFC53D",
       "backgroundColor": "#060A14",
       "bundler": "metro"

@@ -7,7 +7,6 @@ import {
   type ProviderConfig,
   type RouteEntry,
 } from './providers';
-import { quotaBook } from './quota';
 
 export type ApiRole = Exclude<CrewRole, 'USER' | 'SYSTEM'> | 'PLEASER';
 
@@ -348,23 +347,7 @@ export async function complete(req: CompletionRequest): Promise<CompletionResult
       continue;
     }
 
-    const gate = quotaBook.check(provider.id);
-    if (!gate.ok) {
-      failures.push({
-        provider: provider.id,
-        providerName: provider.name,
-        kind: gate.reason === 'SIMULATED' ? 'QUOTA' : 'QUOTA',
-        message: gate.message ?? '额度已用尽',
-      });
-      continue;
-    }
-    if (gate.waitMs > 0) {
-      req.onEvent?.('quota', `${provider.name} 触发 RPM 上限，等待 ${Math.ceil(gate.waitMs / 1000)}s`);
-      await sleep(gate.waitMs);
-    }
-
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-      quotaBook.record(provider.id);
       const result = await callProvider(entry, key, req);
 
       if (result.text) {

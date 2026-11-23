@@ -11,7 +11,6 @@ import type {
 } from '../types';
 import { AllProvidersFailedError } from '../ai/client';
 import { configuredProviders, DEMO_MODE_DEFAULT } from '../ai/providers';
-import { quotaBook } from '../ai/quota';
 import { failureSummary } from '../ai/reviewer';
 import {
   runBuilder,
@@ -43,7 +42,6 @@ const initialState = (): AppState => ({
   projects: [],
   activeId: undefined,
   demoMode: DEMO_MODE_DEFAULT,
-  quotas: quotaBook.snapshot(),
   notice: undefined,
   revision: 0,
 });
@@ -70,7 +68,6 @@ class CrewStore {
   private eventProjectId: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
-  private quotaUnsub?: () => void;
 
   // ---------- React binding ----------
   subscribe = (listener: Listener): (() => void) => {
@@ -111,7 +108,6 @@ class CrewStore {
   // ---------- 生命周期 ----------
   async hydrate(): Promise<void> {
     if (this.state.hydrated) return;
-    await quotaBook.hydrate();
     let projects: Project[] = [];
     let activeId: string | undefined;
     let demoMode = DEMO_MODE_DEFAULT;
@@ -155,14 +151,8 @@ class CrewStore {
       projects: restored,
       activeId,
       demoMode,
-      quotas: quotaBook.snapshot(),
     };
     this.emit();
-
-    this.quotaUnsub?.();
-    this.quotaUnsub = quotaBook.subscribe(() => {
-      this.patch({ quotas: quotaBook.snapshot() });
-    });
 
     restored.forEach((item) => {
       if (item.status === 'PENDING') {
@@ -231,10 +221,6 @@ class CrewStore {
     });
     this.notice(COPY.brainstorm.submitted);
     this.save();
-    if (quotaBook.isSimulatedExhausted) {
-      this.pause(withLog.id, 'START', 'QUOTA_SIM', COPY.logs.pausedQuota);
-      return this.project(withLog.id);
-    }
     this.enqueue(project.id, 'START');
     return withLog;
   }
@@ -378,10 +364,6 @@ class CrewStore {
   resume(projectId: string): void {
     const project = this.project(projectId);
     if (!project || project.status !== 'PAUSED') return;
-    if (quotaBook.isSimulatedExhausted) {
-      this.notice(COPY.errors.quotaStill);
-      return;
-    }
     if (!this.state.demoMode && configuredProviders().length === 0) {
       this.notice(COPY.errors.noKey);
       return;
@@ -403,22 +385,6 @@ class CrewStore {
     this.save();
   }
 
-  setQuotaSimulated(value: boolean): void {
-    quotaBook.setSimulatedExhausted(value);
-    this.notice(value ? COPY.profile.simulated : COPY.profile.quotaHint);
-    if (value) {
-      const queued = this.state.projects.find((item) => item.status === 'PENDING');
-      if (queued) {
-        this.pause(queued.id, queued.resumeTask ?? 'START', 'QUOTA_SIM', COPY.logs.pausedQuota);
-        return;
-      }
-      const runningProject = this.state.projects.find((item) => item.status === 'BUILDING');
-      if (runningProject) {
-        this.log(runningProject.id, 'SYSTEM', COPY.logs.simQuota, 'FAIL');
-      }
-    }
-  }
-
   dismissNotice(): void {
     if (this.noticeTimer) clearTimeout(this.noticeTimer);
     this.patch({ notice: undefined });
@@ -434,11 +400,9 @@ class CrewStore {
       ...initialState(),
       hydrated: true,
       demoMode: this.state.demoMode,
-      quotas: quotaBook.snapshot(),
     };
     this.emit();
     await AsyncStorage.removeItem(STORAGE_KEY);
-    await quotaBook.reset();
     this.notice(COPY.profile.resetDone);
   }
 

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: naodong-shigongdui
+    name: forgecrew
     runtime: node
     plan: free
     region: oregon

@@ -50,7 +50,7 @@ function Shell() {
 
   return (
     <View style={styles.shell}>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer theme={navTheme} documentTitle={{ enabled: false }}>
         <RootTabs />
       </NavigationContainer>
       <NoticeBanner />

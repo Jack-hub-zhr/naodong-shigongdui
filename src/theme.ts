@@ -36,6 +36,11 @@ export interface ThemeColors {
   white: string;
   black: string;
   overlay: string;
+  /** 卡片顶部高光描边 */
+  sheen: string;
+  /** 阴影基色 */
+  shadowColor: string;
+  shadowOpacity: number;
 }
 
 export const lightColors: ThemeColors = {
@@ -67,6 +72,9 @@ export const lightColors: ThemeColors = {
   white: '#FFFFFF',
   black: '#000000',
   overlay: 'rgba(0, 0, 0, 0.24)',
+  sheen: 'rgba(255, 255, 255, 0.9)',
+  shadowColor: '#0B1220',
+  shadowOpacity: 0.1,
 };
 
 export const darkColors: ThemeColors = {
@@ -98,6 +106,9 @@ export const darkColors: ThemeColors = {
   white: '#FFFFFF',
   black: '#000000',
   overlay: 'rgba(2, 5, 12, 0.72)',
+  sheen: 'rgba(148, 184, 255, 0.20)',
+  shadowColor: '#000000',
+  shadowOpacity: 0.55,
 };
 
 export const spacing = {
@@ -165,3 +176,56 @@ export const shadow = {
     },
   }),
 } as const;
+
+type ShadowLevel = 'card' | 'raised' | 'floating' | 'glow';
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const value = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** 随主题变化的层叠阴影：深色下更重，亮色下更柔。 */
+export function elevation(colors: ThemeColors, level: ShadowLevel = 'card') {
+  const scale: Record<ShadowLevel, { y: number; blur: number; opacity: number }> = {
+    card: { y: 10, blur: 30, opacity: 1 },
+    raised: { y: 16, blur: 44, opacity: 1.3 },
+    floating: { y: 22, blur: 56, opacity: 1.6 },
+    glow: { y: 10, blur: 30, opacity: 1 },
+  };
+  const spec = scale[level];
+  const color = level === 'glow' ? colors.yellow : colors.shadowColor;
+  return Platform.select({
+    ios: {
+      shadowColor: color,
+      shadowOffset: { width: 0, height: spec.y },
+      shadowOpacity: Math.min(0.9, colors.shadowOpacity * spec.opacity),
+      shadowRadius: spec.blur / 2,
+    },
+    android: { elevation: level === 'card' ? 3 : level === 'raised' ? 6 : 9 },
+    default: {
+      boxShadow: `0 ${spec.y}px ${spec.blur}px ${hexToRgba(
+        color,
+        Math.min(0.9, colors.shadowOpacity * spec.opacity),
+      )}, inset 0 1px 0 ${colors.sheen}`,
+    },
+  }) as Record<string, unknown>;
+}
+
+/** Web 过渡：容器属性变化时自动补间，原生端忽略。 */
+export function webTransition(properties: string, duration = 200): Record<string, unknown> {
+  if (Platform.OS !== 'web') return {};
+  return {
+    transitionProperty: properties,
+    transitionDuration: `${duration}ms`,
+    transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+  };
+}
+
+/** Web 悬停提升，原生端不生效。 */
+export function webHover(style: Record<string, unknown>): Record<string, unknown> {
+  return Platform.OS === 'web' ? style : {};
+}

@@ -129,17 +129,6 @@ export interface Project {
   notifyOnResume?: boolean;
 }
 
-export interface ProviderQuotaSnapshot {
-  id: ProviderId;
-  used: number;
-  limit: number;
-  rpm: number;
-  rpmUsed: number;
-  day: string;
-  simulatedExhausted: boolean;
-  configured: boolean;
-}
-
 export interface Notice {
   id: string;
   text: string;
@@ -151,7 +140,6 @@ export interface AppState {
   projects: Project[];
   activeId?: string;
   demoMode: boolean;
-  quotas: Record<ProviderId, ProviderQuotaSnapshot>;
   notice?: Notice;
   /** 用于强制刷新派生视图 */
   revision: number;

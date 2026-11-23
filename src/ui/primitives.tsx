@@ -9,8 +9,15 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
-import { radius, shadow, spacing, text, type ThemeColors } from '../theme';
+import Svg, { Defs, LinearGradient, Pattern, Rect, Stop } from 'react-native-svg';
+import {
+  elevation,
+  radius,
+  spacing,
+  text,
+  webTransition,
+  type ThemeColors,
+} from '../theme';
 import { useTheme, useThemedStyles } from '../state/ThemeProvider';
 import { BRAND } from '../brand';
 import { COPY, STATUS_STEP_LABEL } from '../copy';
@@ -36,9 +43,20 @@ export function ScreenShell({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { styles } = useUi();
+  const { styles, colors } = useUi();
   return (
     <SafeAreaView style={[styles.safe, style]} edges={['top', 'left', 'right']}>
+      <View pointerEvents="none" style={styles.shellGlow}>
+        <Svg width="100%" height="280">
+          <Defs>
+            <LinearGradient id="shell-top-glow" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.yellow} stopOpacity="0.10" />
+              <Stop offset="1" stopColor={colors.yellow} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="280" fill="url(#shell-top-glow)" />
+        </Svg>
+      </View>
       {children}
     </SafeAreaView>
   );
@@ -64,7 +82,12 @@ export function ScreenHeader({
           <Text style={[text.small, styles.eyebrow]}>{eyebrow}</Text>
           <Text style={[text.display, styles.headerTitle]}>{title}</Text>
         </View>
-        {right ?? <LogoMark size={40} ring={false} />}
+        {right ?? (
+          <View style={styles.brandLockup}>
+            <LogoMark size={40} ring={false} />
+            <Text style={[text.micro, styles.brandWord]}>ForgeCrew</Text>
+          </View>
+        )}
       </View>
       {subtitle ? <Text style={[text.body, styles.headerSub]}>{subtitle}</Text> : null}
     </View>
@@ -80,8 +103,23 @@ export function Card({
   style?: StyleProp<ViewStyle>;
   raised?: boolean;
 }) {
-  const { styles } = useUi();
-  return <View style={[styles.card, raised && styles.cardRaised, style]}>{children}</View>;
+  const { styles, colors } = useUi();
+  return (
+    <View style={[styles.card, raised && styles.cardRaised, style]}>
+      <View pointerEvents="none" style={styles.cardSheenWrap}>
+        <Svg width="100%" height="120">
+          <Defs>
+            <LinearGradient id="card-top-sheen" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.sheen} stopOpacity="0.42" />
+              <Stop offset="1" stopColor={colors.sheen} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="120" fill="url(#card-top-sheen)" />
+        </Svg>
+      </View>
+      {children}
+    </View>
+  );
 }
 
 export function HazardBar({ height = 4 }: { height?: number }) {
@@ -113,19 +151,24 @@ export function PrimaryButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const { styles } = useUi();
+  const [hovered, setHovered] = React.useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       disabled={disabled}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.primaryBtn,
+        hovered && !disabled && styles.primaryHover,
         pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
         style,
       ]}
     >
+      <View pointerEvents="none" style={styles.primaryGloss} />
       <Text style={[text.bodyStrong, styles.primaryLabel]}>{label}</Text>
     </Pressable>
   );
@@ -149,22 +192,27 @@ export function GhostButton({
   disabled?: boolean;
 }) {
   const { colors, styles } = useUi();
+  const [hovered, setHovered] = React.useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       disabled={disabled}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.ghostBtn,
         small && styles.ghostSmall,
         active && styles.ghostActive,
         danger && styles.ghostDanger,
+        hovered && !disabled && styles.ghostHover,
         pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
         style,
       ]}
     >
+      <View pointerEvents="none" style={styles.ghostGloss} />
       <Text
         style={[
           text.bodyStrong,
@@ -387,6 +435,13 @@ export function Divider() {
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
+    shellGlow: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 280,
+    },
     header: {
       width: '100%',
       alignSelf: 'center',
@@ -395,28 +450,57 @@ const createStyles = (colors: ThemeColors) =>
       paddingBottom: spacing.xl,
     },
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    brandLockup: { alignItems: 'flex-end', gap: 2 },
+    brandWord: { color: colors.muted, fontWeight: '600', letterSpacing: 0.6, fontSize: 10 },
     eyebrow: { color: colors.muted, marginBottom: 2 },
     headerTitle: { color: colors.text },
     headerSub: { color: colors.muted, marginTop: spacing.md, maxWidth: 430, fontSize: 15, lineHeight: 22 },
     card: {
       backgroundColor: colors.surface,
-      borderWidth: 0.5,
+      borderWidth: 1,
       borderColor: colors.line,
       borderRadius: radius.lg,
       padding: spacing.xl,
-      ...shadow.card,
+      ...web(elevation(colors, 'card')),
+      ...web(webTransition('box-shadow, border-color, background-color, transform', 240)),
     },
     cardRaised: { backgroundColor: colors.surfaceRaised },
+    cardSheenWrap: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 120,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      overflow: 'hidden',
+    },
     primaryBtn: {
       backgroundColor: colors.yellow,
       borderRadius: radius.md,
-      minHeight: 50,
+      minHeight: 52,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: spacing.xl,
+      overflow: 'hidden',
+      ...web(elevation(colors, 'glow')),
+      ...web(webTransition('transform, box-shadow, background-color, opacity', 180)),
+    },
+    primaryHover: {
+      backgroundColor: colors.yellowBright,
+      transform: [{ translateY: -1 }],
+    },
+    primaryGloss: {
+      position: 'absolute',
+      top: 1,
+      left: 14,
+      right: 14,
+      height: 1.5,
+      borderRadius: 1,
+      backgroundColor: 'rgba(255, 255, 255, 0.75)',
     },
     primaryLabel: { color: colors.onYellow, fontSize: 16, fontWeight: '600' },
-    pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+    pressed: { opacity: 0.74, transform: [{ scale: 0.975 }] },
     disabled: { opacity: 0.35 },
     ghostBtn: {
       borderRadius: radius.md,
@@ -425,15 +509,34 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceSunken,
+      borderWidth: 1,
+      borderColor: colors.line,
+      overflow: 'hidden',
+      ...web(webTransition('transform, background-color, border-color, opacity, box-shadow', 180)),
+    },
+    ghostHover: {
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.lineStrong,
+      transform: [{ translateY: -1 }],
+      ...web(elevation(colors, 'card')),
+    },
+    ghostGloss: {
+      position: 'absolute',
+      top: 0,
+      left: 10,
+      right: 10,
+      height: 1,
+      backgroundColor: colors.sheen,
     },
     ghostSmall: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.sm },
-    ghostActive: { backgroundColor: colors.yellowWash },
-    ghostDanger: { backgroundColor: colors.dangerWash },
+    ghostActive: { backgroundColor: colors.yellowWash, borderColor: colors.yellowWashStrong },
+    ghostDanger: { backgroundColor: colors.dangerWash, borderColor: colors.dangerWash },
     pill: {
       borderWidth: 0.5,
       borderRadius: radius.pill,
       paddingHorizontal: 14,
       paddingVertical: 8,
+      ...web(webTransition('background-color, border-color, transform', 160)),
     },
     roleChip: {
       flexDirection: 'row',
@@ -469,6 +572,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.lineStrong,
       padding: 2,
       justifyContent: 'center',
+      ...web(webTransition('background-color', 180)),
     },
     toggleTrackOn: { backgroundColor: colors.yellow },
     toggleKnob: {
@@ -476,15 +580,19 @@ const createStyles = (colors: ThemeColors) =>
       height: 27,
       borderRadius: 14,
       backgroundColor: colors.white,
-      ...shadow.card,
+      marginLeft: 0,
+      ...web(elevation(colors, 'card')),
+      ...web(webTransition('margin-left', 200)),
     },
-    toggleKnobOn: { alignSelf: 'flex-end' },
+    toggleKnobOn: { marginLeft: 20 },
     segmented: {
       flexDirection: 'row',
       backgroundColor: colors.surfaceSunken,
       borderRadius: radius.md,
       padding: 3,
       gap: 3,
+      borderWidth: 1,
+      borderColor: colors.line,
     },
     segment: {
       flex: 1,
@@ -492,10 +600,11 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
+      ...web(webTransition('background-color, box-shadow', 200)),
     },
     segmentSelected: {
       backgroundColor: colors.surfaceRaised,
-      ...shadow.card,
+      ...web(elevation(colors, 'card')),
     },
     stepper: { flexDirection: 'row', marginTop: spacing.md },
     stepItem: { flex: 1, alignItems: 'center', gap: 5 },
@@ -509,6 +618,10 @@ const createStyles = (colors: ThemeColors) =>
       paddingVertical: spacing.huge,
       paddingHorizontal: spacing.xxl,
       alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.line,
+      ...web(elevation(colors, 'card')),
+      ...web(webTransition('box-shadow, border-color', 240)),
     },
     emptyMark: {
       width: 68,
@@ -521,3 +634,6 @@ const createStyles = (colors: ThemeColors) =>
     },
     divider: { height: 0.5, backgroundColor: colors.line, marginVertical: spacing.md },
   });
+
+/** 把 Web 专属样式安全地并入 ViewStyle 类型。 */
+const web = (style: Record<string, unknown>): ViewStyle => style as ViewStyle;

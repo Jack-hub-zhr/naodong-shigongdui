@@ -26,6 +26,7 @@ export function RootTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
         tabBarActiveTintColor: colors.accentText,
         tabBarInactiveTintColor: colors.faint,
         tabBarStyle: {
@@ -35,9 +36,20 @@ export function RootTabs() {
           backgroundColor: colors.surfaceRaised,
           borderTopColor: colors.line,
           borderTopWidth: 0.5,
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
           height: Platform.OS === 'ios' ? 88 : 76,
           paddingTop: 8,
           paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: `0 -14px 44px ${colors.shadowColor}66, inset 0 1px 0 ${colors.sheen}` }
+            : {
+                shadowColor: colors.shadowColor,
+                shadowOffset: { width: 0, height: -8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 22,
+                elevation: 14,
+              }),
         },
         tabBarLabelStyle: {
           fontFamily: fonts.ui,

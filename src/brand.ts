@@ -1,8 +1,8 @@
 export const BRAND = {
-  fullName: '脑洞施工队',
-  displayName: '脑洞施工',
-  slogan: '一瞬脑洞，Agent 施工队试错到验收',
-  storeTitle: '脑洞施工 - 一瞬脑洞，Agent团队试错到验收',
+  fullName: 'ForgeCrew',
+  displayName: 'ForgeCrew',
+  slogan: 'One idea in. A crew ships it.',
+  storeTitle: 'ForgeCrew · Agent crew from idea to acceptance',
   packageName: 'com.naodongshigong.app',
   version: '1.0.0',
   palette: {

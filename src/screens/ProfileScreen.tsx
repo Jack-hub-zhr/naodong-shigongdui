@@ -5,14 +5,12 @@ import { COPY } from '../copy';
 import { radius, spacing, text, type ThemeColors, type ThemeMode } from '../theme';
 import { useCrew } from '../state/CrewProvider';
 import { useTheme, useThemedStyles } from '../state/ThemeProvider';
-import { PROVIDER_ORDER, PROVIDERS, isProviderConfigured } from '../ai/providers';
 import type { Project } from '../types';
 import {
   Card,
   EmptyState,
   GhostButton,
   Pill,
-  ProgressBar,
   ScreenHeader,
   ScreenShell,
   SectionLabel,
@@ -114,61 +112,6 @@ export function ProfileScreen() {
           </View>
 
           <View>
-            <SectionLabel>{COPY.profile.quotaTitle}</SectionLabel>
-            <Text style={[text.small, styles.sectionHint]}>{COPY.profile.quotaHint}</Text>
-            <Card style={styles.groupCard}>
-              {PROVIDER_ORDER.map((id, index) => {
-                const provider = PROVIDERS[id];
-                const quota = state.quotas[id];
-                const remaining = Math.max(0, quota.limit - quota.used);
-                const configured = isProviderConfigured(id);
-                return (
-                  <View key={id}>
-                    {index > 0 ? <View style={styles.insetDivider} /> : null}
-                    <View style={styles.providerRow}>
-                      <View style={styles.quotaHead}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[text.bodyStrong, { color: colors.text }]}>{provider.name}</Text>
-                          <Text style={[text.micro, styles.providerModel]} numberOfLines={1}>
-                            {provider.defaultModel}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.modeTag,
-                            { backgroundColor: configured ? colors.successWash : colors.surfaceSunken },
-                          ]}
-                        >
-                          <Text style={[text.micro, { color: configured ? colors.success : colors.faint, fontSize: 10 }]}>
-                            {configured ? '服务端托管' : COPY.profile.notConfigured}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.quotaLine}>
-                        <Text style={[text.small, { color: colors.textSoft }]}>
-                          今日已用 {quota.used} · 剩余约 {remaining} 次
-                        </Text>
-                        <Text style={[text.micro, { color: colors.faint }]}>
-                          {quota.rpmUsed}/{provider.rpm} RPM
-                        </Text>
-                      </View>
-                      <ProgressBar value={quota.used / Math.max(1, quota.limit)} />
-                      <View style={styles.quotaFoot}>
-                        <Text style={[text.micro, styles.providerNote]}>
-                          每日上限 {provider.rpd}/日 · {provider.roleNote}
-                        </Text>
-                        {quota.simulatedExhausted ? (
-                          <Text style={[text.micro, { color: colors.danger }]}>{COPY.profile.simulated}</Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-            </Card>
-          </View>
-
-          <View>
             <SectionLabel>{COPY.profile.settingsTitle}</SectionLabel>
             <Card style={styles.groupCard}>
               <View style={styles.settingRow}>
@@ -181,12 +124,15 @@ export function ProfileScreen() {
               <View style={styles.insetDivider} />
               <View style={styles.settingRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[text.bodyStrong, { color: colors.text }]}>施工模型</Text>
+                  <Text style={[text.bodyStrong, { color: colors.text }]}>施工通道</Text>
                   <Text style={[text.small, styles.rowHint]}>
-                    DeepSeek 由服务端统一调用，密钥不会下发到浏览器。
+                    DeepSeek Agent 团队由服务端统一调度，密钥不会下发到浏览器。
                   </Text>
                 </View>
-                <Text style={[text.micro, { color: colors.success }]}>deepseek-chat</Text>
+                <View style={styles.onlineTag}>
+                  <View style={styles.onlineDot} />
+                  <Text style={[text.micro, { color: colors.success }]}>在线</Text>
+                </View>
               </View>
             </Card>
           </View>
@@ -326,16 +272,10 @@ const createStyles = (colors: ThemeColors) =>
     columnMobile: { gap: spacing.xxxl },
     column: { flex: 1, minWidth: 0, gap: spacing.xxxl },
     settingHint: { color: colors.muted, marginTop: spacing.md, textAlign: 'center' },
-    sectionHint: { color: colors.faint, marginTop: -spacing.xs, marginBottom: spacing.md },
     groupCard: { padding: 0, overflow: 'hidden' },
     insetDivider: { height: 0.5, backgroundColor: colors.line, marginLeft: spacing.xl },
-    providerRow: { padding: spacing.xl },
-    quotaHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-    providerModel: { color: colors.faint, marginTop: 3 },
-    modeTag: { borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 5 },
-    quotaLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: spacing.md, gap: spacing.sm },
-    quotaFoot: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
-    providerNote: { color: colors.faint, flex: 1, lineHeight: 16 },
+    onlineTag: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: colors.successWash, paddingHorizontal: 10, paddingVertical: 5 },
+    onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
     settingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, padding: spacing.xl },
     rowHint: { color: colors.muted, marginTop: 4, maxWidth: 340 },
     historyHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
