@@ -36,22 +36,125 @@ export function productUser(prompt, tag) {
 export function builderSystem() {
   return `${COMMON}
 你是开发。只按产品给出的规格写代码，不修改规格。
-输出一个完整、可直接运行的单文件 HTML（含内联 CSS 和 JS），不要输出解释或代码围栏。
+输出一个完整 HTML 文档（含内联 CSS），不要输出解释或代码围栏。本步只做结构与样式，交互脚本留到下一步：在 </body> 前放一个空的 <script id="fc-app"></script> 占位，不要写任何内联脚本或 on* 属性。
 硬性要求：
 1. <!DOCTYPE html>、<html lang="zh-CN">、<head>、<meta charset>、<meta name="viewport">、非空 <title>，结尾必须闭合 </html>
 2. 移动端 375px 宽度不横向滚动，触控目标 ≥44px
-3. 至少一个 <button type="button">，交互用 addEventListener 实现，脚本闭合
+3. 至少一个 <button type="button">，为它设置稳定的 id；不要写 onclick 等内联事件
 4. 为 4 条验收标准分别在最相关的元素上加 data-acceptance="A1"…"A4"
 5. 不引用外部 JS/CSS/字体/图片；不出现 TODO、lorem ipsum、undefined；空 href 不允许
 6. 文案用中文，视觉完成度要高，不要占位骨架
 7. localStorage、sessionStorage、navigator.clipboard、AudioContext 等可能被沙箱禁止的 API，必须写在 try/catch 里；绝不能让一次异常中断整个脚本
 8. 所有按钮必须真实可用：点击后要有可见状态变化（分数、倒计时、文案、面板切换），不能是空函数
-9. 产物控制在 9KB 以内，优先保证完整闭合与可运行
+9. 产物控制在 9KB 以内；先保证完整闭合，再接视觉装饰；接近上限时删装饰，绝不能截断
+
+视觉基线（达不到视为未完成）：
+- 顶部用 CSS 变量定义背景 / 表面 / 描边 / 主文字 / 次文字 / 一个强调色，全站复用
+- 正文字号 15–17px、行高 1.6–1.75；大标题 clamp(28px, 7vw, 40px)，字重对比明确
+- 使用系统字体栈：-apple-system, "PingFang SC", "Segoe UI", Roboto, sans-serif
+- 间距按 8px 递进；圆角 12–18px；细描边加一层柔和阴影，避免厚重投影
+- 页面要有主视觉区、内容分组、主次按钮，不能整页都是等宽卡片平铺
+- 交互 160–240ms ease-out；按钮/输入/卡片要有 hover、active、focus-visible 三态
+- 禁止默认蓝色 #007bff、紫色渐变、纯黑纯白大面积、emoji 当图标、占位骨架
+- 禁止“白底 + 一个按钮 + 一张卡片”的骨架页；CSS 至少 80 行，产物目标 5–6.5KB
+
+按标签选择视觉方向：
+- 小游戏：深色舞台（#0B0D12 底 + 双径向光），顶部 HUD 三栏（分数 / 倒计时 / 连击），中央 1:1 游戏区，底部独立控制行；开始前有半透明遮罩和大按钮，结束弹结算卡
+- 页面：主视觉 hero + 2–4 个内容分组 + 固定底部主 CTA；大标题 clamp(32px, 6vw, 44px)
+- 工具：左右分栏（输入 / 结果），顶部状态条，结果区用等宽数字，支持复制或清空
+- 自动化：统计卡 + 时间线 + 状态表，数字优先，状态用色点而不是整行填色
 
 如果是小游戏，额外要求：
 10. 「开始 / 暂停 / 重开」是独立按钮，放在游戏区正下方，与游戏区至少间隔 16px；禁止绝对定位压在游戏区上
 11. 点击开始后真正进入可玩状态：倒计时走动、按钮文案变为「暂停」，再次点击可暂停；结束给出结算并可重开
-12. 若用 <canvas>，点击坐标按 getBoundingClientRect() 实际尺寸换算，并设置 touch-action:none`;
+12. 若用 <canvas>，设置 touch-action:none，并在脚本步骤按 getBoundingClientRect() 换算坐标`;
+}
+
+function builderLayout(tag) {
+  if (tag === '小游戏') return `结构骨架（照着实现，不要简化）：
+body: min-height:100dvh; background:#07080B + 两个 radial-gradient 光斑; display:flex; align-items:center; justify-content:center; padding:16px
+.stage: width:min(420px,100%); min-height:min(780px,calc(100dvh - 32px)); display:grid; grid-template-rows:auto auto 1fr auto; gap:16px; background:linear-gradient(180deg,#15171C,#0C0E12); border:1px solid #2A2E36; border-radius:24px; padding:20px
+header: 标题 clamp(26px,7vw,36px) + 13px 副标题 #9AA0A8；副标题必须放在 header 内部，.stage 只保留 header/.hud/.arena/footer 四个直接子元素
+.hud: 三列网格，每格高 72px、内容居中，12px 标签 + 28px/1.1 等宽数字；卡片样式必须写「.hud > div」，不能写「.hud div」（否则会给数字容器重复加 padding），数字单行不换行
+.arena: position:relative; min-height:360px; 圆角 20px; radial-gradient 背景; 中间三圈同心圆刻度
+开始遮罩绝对铺满 .arena，半透明黑，中央 180px 大按钮「开始」，下方 12px 操作提示
+命中圆点 120px 强调色圆，带 glow 和 scale 动画，命中闪白并飘 +1
+footer: 12px 说明 + 44px 重开按钮；结束在 .arena 内弹结算卡`;
+  if (tag === '工具') return `结构骨架（照着实现，不要简化）：
+body: min-height:100dvh; background:#F4F5F7; color:#14161A; padding:24px
+.shell: max-width:1040px; margin:auto; background:#fff; border:1px solid #E2E5EA; border-radius:20px; overflow:hidden
+header: 56px 高，左侧标题 18px + 右侧状态点
+.panels: grid-template-columns:1fr 1fr; 移动端单列; 两栏之间 1px 分隔线
+左栏: 12px 标签 + textarea(min-height:180px, 无边框) + 44px 主按钮
+右栏: 12px 标签 + 等宽结果区(min-height:220px) + 复制/清空按钮
+footer: 12px 说明 + 字数统计`;
+  if (tag === '自动化') return `结构骨架（照着实现，不要简化）：
+body: min-height:100dvh; background:#0E1014; color:#E8EAED; padding:24px
+.shell: max-width:1080px; margin:auto
+header: 标题 clamp(26px,5vw,34px) + 13px 副标题 + 右侧运行状态
+.kpis: 三列统计卡，28px 等宽数字 + 12px 标签
+.timeline: 左侧 2px 竖线 + 节点圆点，每项 14px 标题 + 12px 时间
+.table: 状态表，行高 44px，状态用 8px 色点，不要整行填色`;
+  return `结构骨架（照着实现，不要简化）：
+body: min-height:100dvh; background:#F7F6F2; color:#17181C; padding:24px
+.page: max-width:760px; margin:auto
+.hero: padding:48px 0 32px; 标题 clamp(32px,6vw,44px); 副标题 16px #5C6068
+.sections: 2–4 个分组，每组有 12px 小标签 + 20px 标题 + 15px 正文，组间 28px
+.cta: 底部 sticky 条，44px 主按钮 + 次按钮
+装饰只用细线、色块和留白，不要堆卡片`;
+}
+
+export function scriptSystem() {
+  return `${COMMON}
+你是开发。上一步已经完成 HTML 与 CSS，现在只补交互脚本。
+只输出一个 <script>…</script>，不要解释、不要代码围栏、不要重复 HTML/CSS。
+要求：
+- 用 document.getElementById / querySelector 绑定上一步已有的 id，不要新建大段结构
+- 所有按钮点击后必须有可见变化；事件用 addEventListener
+- 脚本必须闭合，内部不得出现字符串形式的 </script>
+- localStorage、AudioContext 等可能被沙箱禁止的 API 必须 try/catch
+- 不得使用 on* 内联属性`;
+}
+
+export function scriptUser(p, html) {
+  const spec = p.spec || {};
+  return `用户原话：${p.prompt}
+标签：${p.tag}
+验收标准：
+${(spec.acceptance || []).map((t, i) => `A${i + 1}. ${t}`).join('\n')}
+页面 HTML（只读，用于找 id）：
+${String(html).slice(0, 5200)}
+
+请输出实现全部交互的 <script>，必须让页面真正可玩/可用。`;
+}
+
+function ensureClosed(html) {
+  let h = String(html || '').trim();
+  if (!h || !/<body/i.test(h)) return h;
+  if (/<style[\s\S]*$/i.test(h) && !/<\/style>/i.test(h)) h += '\n}</style>';
+  if (!/<\/body>/i.test(h)) h += '</body>';
+  if (!/<\/html>/i.test(h)) h += '</html>';
+  return h;
+}
+
+function stripAppScript(text) {
+  let t = String(text || '').trim().replace(/^```(?:html|javascript|js)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const start = t.search(/<script/i);
+  const end = t.toLowerCase().lastIndexOf('</script>');
+  if (start !== -1) {
+    t = t.slice(start, end !== -1 ? end + 9 : undefined);
+  } else {
+    t = `<script id="fc-app">\n${t}\n</script>`;
+  }
+  return t;
+}
+
+function injectAppScript(html, scriptTag) {
+  const tag = String(scriptTag || '').replace(/^<script[^>]*>/i, '<script id="fc-app">');
+  if (/<script[^>]*id=["']fc-app["'][^>]*>\s*<\/script>/i.test(html)) {
+    return html.replace(/<script[^>]*id=["']fc-app["'][^>]*>\s*<\/script>/i, tag);
+  }
+  return html.replace(/<\/body>/i, tag + '\n</body>');
 }
 
 export function builderUser(p, extra = {}) {
@@ -72,6 +175,8 @@ ${(spec.acceptance || []).map((t, i) => `  A${i + 1}. ${t}`).join('\n')}
 
 已做出的裁决：
 ${chosen || '（暂无，先用最稳妥路径）'}
+
+${builderLayout(p.tag)}
 
 第 ${p.round} 轮产物。
 ${p.reworkOrder ? `\n返工要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
@@ -120,6 +225,9 @@ export function stripCode(text) {
   if (start > 0) t = t.slice(start);
   const lastClose = t.toLowerCase().lastIndexOf('</html>');
   if (lastClose !== -1) t = t.slice(0, lastClose + 7);
+  // 统一强调色，避免模型回落到默认蓝
+  t = t.replace(/#(?:1a73e8|007bff|2563eb|0d6efd|3b82f6|1d4ed8)/gi, '#FFC53D');
+  t = t.replace(/rgb\(26\s*,\s*115\s*,\s*232\)/gi, 'rgb(255,197,61)');
   return t.trim();
 }
 
@@ -215,6 +323,24 @@ export function normalizeDelight(raw) {
     cleaned[cleaned.length - 1].kind = 'IMPLICIT';
   }
   return cleaned.slice(0, 5);
+}
+
+
+function applyBaseStyle(html) {
+  if (!html || !html.includes('</head>')) return html;
+  const base = `<style id="fc-base">
+html{-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}
+html body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+img,svg,video{max-width:100%}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+html body{min-height:100dvh}
+body>:is(main,#game,#app,.app,.stage,.page,.shell){min-height:calc(100dvh - 40px)}
+:root{--accent:#FFC53D;--primary:#FFC53D;--brand:#FFC53D}
+::selection{background:rgba(232,179,59,.28)}
+</style>`;
+  return html.replace('</head>', base + '</head>');
 }
 
 // review checks
@@ -418,13 +544,35 @@ export async function advance(p, deps) {
             system: builderSystem(),
             user: builderUser(p, { previous: p.artifact?.html }),
             temperature: 0.7,
-            maxTokens: 3800,
+            maxTokens: 4600,
           });
         } catch (e) {
           pause(p, e, deps);
           return 'paused';
         }
-        const html = stripCode(res.text);
+        let html = ensureClosed(stripCode(res.text));
+        if (!html || !/<body/i.test(html)) {
+          p.reworkOrder = '上一步没有产出完整 HTML，请重新输出完整结构与样式';
+          deps.log('BUILDER', '结构与样式未闭合，退回重做', 'fail');
+          p.round += 1;
+          p.updatedAt = Date.now();
+          deps.save();
+          continue;
+        }
+        let jsRes;
+        try {
+          jsRes = await callModel(p, deps, {
+            role: 'BUILDER',
+            system: scriptSystem(),
+            user: scriptUser(p, html),
+            temperature: 0.5,
+            maxTokens: 1600,
+          });
+        } catch (e) {
+          pause(p, e, deps);
+          return 'paused';
+        }
+        html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)));
         p.artifact = {
           round: p.round,
           title: p.title,
@@ -534,6 +682,8 @@ export async function advance(p, deps) {
         p.status = 'DELIVERED';
         p.stage = stageOf('DELIVERED');
         p.phase = 'polish';
+        p.saluteUntil = Date.now() + 8000;
+        p.saluteKind = 'done';
         stopAgent(p, 'orch', 100);
         stopAgent(p, 'builder', 100);
         stopAgent(p, 'reviewer', 100);

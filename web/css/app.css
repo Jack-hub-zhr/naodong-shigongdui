@@ -1,5 +1,7 @@
 /* design tokens */
 
+@keyframes salute-pop { 0% { transform: translateY(4px) scale(0.6); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+
 :root,
 [data-theme="dark"] {
   --bg: #0a0a0b;
@@ -628,7 +630,7 @@ input, textarea { font: inherit; color: inherit; }
 .channel-row .txt span { display: block; margin-top: 4px; font-size: 11px; color: var(--text-3); }
 .channel-row .side { margin-left: auto; font-size: 11px; color: var(--text-2); }
 .history-tabs { width: 100%; margin: 2px 0 6px; }
-.history-tabs button { flex: 1; }
+.history-tabs button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 10.5px; white-space: nowrap; letter-spacing: 0; }
 .about-product { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .about-product b { display: block; font-size: 13px; }
 .about-product span { display: block; margin-top: 3px; font-size: 10.5px; color: var(--text-3); }
@@ -704,6 +706,7 @@ input, textarea { font: inherit; color: inherit; }
 .agent-avatar.teal { border-color: rgba(89, 194, 180, 0.35); color: var(--teal); background: var(--teal-soft); }
 .agent-id { min-width: 0; }
 .agent-id b { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; line-height: 1.2; }
+.agent-id .salute { font-size: 15px; line-height: 1; margin-left: 4px; display: inline-block; animation: salute-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .agent-id b em { font-style: normal; font-size: 8.5px; letter-spacing: 0.1em; color: var(--text-3); font-weight: 400; text-transform: uppercase; }
 .agent-card .state { margin-left: auto; flex: 0 0 auto; }
 .agent-action { margin: 6px 0 8px; font-size: 10.5px; color: var(--text-3); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

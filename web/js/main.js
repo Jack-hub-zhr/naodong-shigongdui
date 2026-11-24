@@ -255,11 +255,12 @@ function agentCard(a, opts = {}) {
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
   const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
+  const saluting = Boolean(state.project?.saluteUntil && Date.now() < state.project.saluteUntil);
   return `<button class="agent-card ${opts.mini ? 'mini' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">
       <div class="agent-avatar ${avatarClass}">${a.letter}</div>
-      <div class="agent-id"><b>${a.name}<em>${a.role}</em></b></div>
+      <div class="agent-id"><b>${a.name}${saluting ? '<span class="salute" role="img" aria-label="敬礼">🫡</span>' : ''}<em>${a.role}</em></b></div>
       <div class="state">${statePill}</div>
     </div>
     <div class="agent-action">${esc(a.action)}</div>
@@ -523,10 +524,20 @@ function stepperHtml(p) {
   }).join('')}</div>`;
 }
 
+function isQuotaPause(p) {
+  return p?.status === 'PAUSED' && (p.pausedReason === 'QUOTA' || p.pausedReason === 'RATE_LIMIT');
+}
+
 function pauseBanner(p) {
   if (p.status !== 'PAUSED') return '';
   const reason = pauseReasonText(p);
   const secs = p.nextRetryAt ? Math.max(0, Math.ceil((p.nextRetryAt - Date.now()) / 1000)) : null;
+  if (isQuotaPause(p)) {
+    return `<div class="pause-banner">
+      <span class="dot err"></span>
+      <span><b>免费通道额度已用完</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
+    </div>`;
+  }
   return `<div class="pause-banner">
     <span class="dot err"></span>
     <span><b>${reason.long}</b> ${secs != null ? `，施工队将在 ${secs} 秒后自动续跑` : '，请到我的页检查通道'}</span>
@@ -542,6 +553,9 @@ function buildActions(p) {
   if (p.status === 'DELIVERED') {
     return `<button class="btn" data-nav="idea" type="button">${COPY.backToIdea}</button>
       <button class="btn primary" data-nav="review" type="button">${COPY.goReview}</button>`;
+  }
+  if (isQuotaPause(p)) {
+    return `<button class="btn" data-nav="review" type="button">${COPY.goReview}</button>`;
   }
   return `<button class="btn" data-nav="review" type="button">${COPY.goReview}</button>
     <button class="btn primary" id="advance" type="button">${p.status === 'PAUSED' ? '现在继续' : '继续推进'}</button>`;
@@ -756,7 +770,7 @@ function profileHtml() {
         </div>
         <div class="panel-sect">
           <div class="setting-row">
-            <div class="txt"><b>施工队行注目礼</b><span>队员执行动作时，状态点与进度条轻微脉冲</span></div>
+            <div class="txt"><b>施工队敬礼</b><span>开工与交付时，5 名成员各敬一个礼</span></div>
             <div class="side"><button class="switch" data-toggle-follow type="button" aria-checked="${state.autofollow}" aria-label="自动跟随"></button></div>
           </div>
           <div class="setting-row">
@@ -996,6 +1010,8 @@ function dispatchIdea() {
   try { localStorage.removeItem(KEYS.draft); } catch (e) {}
   const project = newProject(text, state.tag);
   project.spec = null;
+  project.saluteUntil = Date.now() + 8000;
+  project.saluteKind = 'start';
   setRoute('build');
   renderAll();
   workspaceEl.scrollTop = 0;
