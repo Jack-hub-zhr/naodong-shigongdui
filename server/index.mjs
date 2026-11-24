@@ -427,30 +427,6 @@ async function handleRequest(req, res) {
     throw new ApiError(400, 'HTTP', '请求 URL 无效');
   }
 
-  if (pathname === '/api/provider-probe') {
-    const provider = activeProvider();
-    const target = new URL(req.url ?? '/', 'http://localhost').searchParams.get('target') || 'github';
-    const url = target === 'azure'
-      ? 'https://models.inference.ai.azure.com/chat/completions'
-      : provider.url;
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(provider.key ? { Authorization: `Bearer ${provider.key}` } : {}) },
-        body: JSON.stringify({ model: target === 'azure' ? 'gpt-4o-mini' : provider.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 }),
-        signal: AbortSignal.timeout(30000),
-      });
-      const text = await r.text();
-      const body = JSON.stringify({ provider: provider.id, target, status: r.status, contentType: r.headers.get('content-type'), body: text.slice(0, 300) });
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(body);
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ provider: provider.id, target, error: String(err) }));
-    }
-    return;
-  }
-
   if (pathname === '/health' || pathname === '/healthz') {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       throw new ApiError(405, 'HTTP', '请求方法不允许', { Allow: 'GET, HEAD' });
