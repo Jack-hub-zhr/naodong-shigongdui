@@ -6,7 +6,7 @@ const PORT = Number.parseInt(process.env.PORT ?? '3000', 10);
 const DIST_DIR = resolve(process.cwd(), 'dist');
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const FREE_URL = process.env.FREE_BASE_URL?.trim() || 'https://text.pollinations.ai/openai';
-const FREE_MODEL = process.env.FREE_MODEL?.trim() || 'openai';
+const FREE_MODEL = process.env.FREE_MODEL?.trim() || 'openai-fast';
 const GITHUB_MODELS_URL = process.env.GITHUB_MODELS_URL?.trim() || 'https://models.github.ai/inference/chat/completions';
 const GITHUB_MODELS_MODEL = process.env.GITHUB_MODELS_MODEL?.trim() || 'openai/gpt-4o-mini';
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -216,7 +216,7 @@ function activeProvider() {
     };
   }
   const githubToken = process.env.GITHUB_MODELS_TOKEN?.trim();
-  if (githubToken) {
+  if (githubToken && process.env.GITHUB_MODELS_ENABLED === 'true') {
     return {
       id: 'github',
       name: 'GitHub 模型通道',
@@ -276,10 +276,13 @@ async function completeUpstream(input) {
             model: provider.model,
             messages: [
               { role: 'system', content: input.system },
-              { role: 'user', content: input.user },
+              { role: 'user', content: provider.id === 'free'
+                ? `${input.user}\n\n[构建请求 ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}]`
+                : input.user },
             ],
             temperature: input.temperature,
             max_tokens: input.maxTokens,
+            ...(provider.id === 'free' ? { reasoning_effort: 'low', private: true, seed: Math.floor(Math.random() * 1_000_000_000) } : {}),
             ...(input.json && provider.jsonMode ? { response_format: { type: 'json_object' } } : {}),
           }),
           redirect: 'error',
@@ -319,6 +322,10 @@ async function completeUpstream(input) {
 
       if (response.status === 401 || response.status === 403) {
         throw new ApiError(502, 'AUTH', `${provider.name} 密钥无效或无权限`);
+      }
+      if (response.status === 402 && attempt < 2) {
+        await waitForBackoff(attempt + 2, controller.signal);
+        continue;
       }
       if (response.status === 402) {
         throw new ApiError(402, 'QUOTA', `${provider.name} 账户余额不足`);

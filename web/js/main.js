@@ -1146,7 +1146,7 @@ function sheetHtml({ mobile = true } = {}) {
         <h2>施工队</h2>
         <div class="sub">${agents.length} 名成员 · ${workingCount(agents)} 名作业中 · ${p?.providerName || COPY.channelShort}</div>
       </div>
-      <button class="sheet-close" id="close-sheet" type="button">收起</button>
+      <button class="sheet-close" id="close-sheet" type="button">收起施工队</button>
     </div>
     <div class="sheet-body">${crewBodyHtml(p, { mini: true })}</div>
     <div class="sheet-foot">

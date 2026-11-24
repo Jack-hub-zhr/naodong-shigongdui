@@ -46,7 +46,7 @@ export function builderSystem() {
 6. 文案用中文，视觉完成度要高，不要占位骨架
 7. localStorage、sessionStorage、navigator.clipboard、AudioContext 等可能被沙箱禁止的 API，必须写在 try/catch 里；绝不能让一次异常中断整个脚本
 8. 所有按钮必须真实可用：点击后要有可见状态变化（分数、倒计时、文案、面板切换），不能是空函数
-9. 产物控制在 12KB 以内，优先保证完整闭合与可运行
+9. 产物控制在 9KB 以内，优先保证完整闭合与可运行
 
 如果是小游戏，额外要求：
 10. 「开始 / 暂停 / 重开」是独立按钮，放在游戏区正下方，与游戏区至少间隔 16px；禁止绝对定位压在游戏区上
@@ -418,7 +418,7 @@ export async function advance(p, deps) {
             system: builderSystem(),
             user: builderUser(p, { previous: p.artifact?.html }),
             temperature: 0.7,
-            maxTokens: 7000,
+            maxTokens: 3800,
           });
         } catch (e) {
           pause(p, e, deps);
