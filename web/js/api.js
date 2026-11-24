@@ -1,4 +1,4 @@
-/* 与 /api/complete 的客户端：超时、重试、错误分类、心跳 */
+// /api/complete client: timeout, retry, error mapping
 
 import { API } from './config.js';
 import { bumpCalls } from './store.js';
@@ -22,8 +22,8 @@ function timeoutSignal(ms) {
 }
 
 /**
- * 真实模型调用。契约与服务端一致：
- * POST /api/complete { role, system, user, json, temperature, maxTokens }
+ * POST /api/complete
+ * body: { role, system, user, json, temperature, maxTokens }
  */
 export async function complete(req) {
   const url = API.endpoint('/api/complete');

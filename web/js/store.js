@@ -1,4 +1,4 @@
-/* 单一状态源：项目状态机、派生函数、持久化 */
+// project store: state machine, selectors, persistence
 
 import { ROLES } from './config.js';
 
@@ -33,7 +33,7 @@ export const STATUS_TONE = {
   PAUSED: 'fail',
 };
 
-/** 阶段索引：0 进场 / 1 施工 / 2 自检 / 3 待裁决 / 4 返工 / 5 交付 */
+/** stage index: 0 in / 1 build / 2 review / 3 decide / 4 rework / 5 done */
 export function stageOf(status) {
   switch (status) {
     case 'PENDING': return 0;
@@ -60,7 +60,7 @@ export const STAGES = [
   { no: '06', key: 'deliver', name: '交付' },
 ];
 
-/* 运行期状态（非持久化） */
+// runtime state (not persisted)
 export const state = {
   route: 'idea',
   project: null,
@@ -76,7 +76,7 @@ export const state = {
   lastSavedAt: 0,
 };
 
-/* ---------------- 持久化 ---------------- */
+// persistence
 function read(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -91,7 +91,7 @@ function write(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
-    /* 配额满：丢弃旧项目产物后重试一次 */
+    // quota exceeded: drop old artifacts and retry once
     try {
       const projects = (state.projects || []).slice(-3).map((p) => ({ ...p, artifact: null }));
       localStorage.setItem(KEYS.projects, JSON.stringify(projects));
@@ -192,7 +192,7 @@ export function setRoute(route, { push = true } = {}) {
   document.dispatchEvent(new CustomEvent('fc:route', { detail: state.route }));
 }
 
-/* ---------------- 项目 ---------------- */
+// projects
 export function titleFromPrompt(prompt) {
   const clean = String(prompt).replace(/\s+/g, ' ').trim();
   const cut = clean.replace(/^(帮我|请|给我|我想|想要|做一个|做个)/, '').trim();
@@ -276,7 +276,7 @@ export function touch(p, extra = {}) {
   scheduleSave();
 }
 
-/* ---------------- 日志 ---------------- */
+// logs
 export function addLog(p, role, text, result = null, extra = {}) {
   const entry = {
     ts: Date.now(),
@@ -310,7 +310,7 @@ export function clearLogs() {
   scheduleSave();
 }
 
-/* ---------------- 派生：Agent ---------------- */
+// agent selectors
 const EST = { orch: 26000, product: 26000, builder: 52000, reviewer: 16000, pleaser: 20000 };
 const BASE = { orch: 12, product: 8, builder: 8, reviewer: 12, pleaser: 0 };
 
@@ -456,7 +456,7 @@ export function pauseReasonText(p) {
   return map[p?.pausedReason] || { short: '已暂停', long: '已暂停' };
 }
 
-/* ---------------- 时间格式 ---------------- */
+// time format
 export function formatRelative(ts, now = Date.now()) {
   if (!ts) return '—';
   const diff = Math.max(0, now - ts);

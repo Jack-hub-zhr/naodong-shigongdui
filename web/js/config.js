@@ -1,4 +1,4 @@
-/* 品牌、文案、图标、运行配置 */
+// brand, copy, icons
 
 export const BRAND = {
   name: 'ForgeCrew',

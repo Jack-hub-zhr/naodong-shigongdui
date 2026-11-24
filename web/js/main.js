@@ -1,4 +1,4 @@
-/* ForgeCrew · 应用入口：路由、四页渲染、状态台、抽屉、⌘K、真实编排驱动 */
+// app entry: routing, views, crew panel, sheet, command palette
 
 import {
   BRAND, COPY, ICONS, LOGO_SVG, ROLES, TAGS, RECIPES, API,
@@ -85,9 +85,7 @@ function isTablet() {
   return window.matchMedia('(max-width: 1080px)').matches;
 }
 
-/* ============================================================
-   引擎
-   ============================================================ */
+// engine loop
 function deps() {
   return {
     call: (args) => complete(args),
@@ -166,9 +164,7 @@ function checkPauseTimer() {
   }
 }
 
-/* ============================================================
-   渲染：左导航 / 顶栏 / Tab
-   ============================================================ */
+// render: rail / topbar / tabs
 function navCount(route) {
   if (route === 'idea') return state.projects.length || '';
   return '';
@@ -253,9 +249,7 @@ function renderTabbar() {
   }).join('');
 }
 
-/* ============================================================
-   渲染：施工队
-   ============================================================ */
+// render: crew panel
 function agentCard(a, opts = {}) {
   const expanded = ui.expanded.has(a.key);
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
@@ -319,9 +313,7 @@ function renderCrew() {
   if (body) body.scrollTop = scrollTop;
 }
 
-/* ============================================================
-   渲染：页面分发
-   ============================================================ */
+// render: page dispatch
 function renderPage() {
   const active = document.activeElement;
   const focusId = active && active.id ? active.id : null;
@@ -362,7 +354,7 @@ function renderAll() {
   renderPage();
 }
 
-/* ---------------- 脑洞 ---------------- */
+// view: idea
 function recipeList() {
   return RECIPES.map((text, i) => `
     <button class="recipe" data-recipe="${i}" type="button">
@@ -447,7 +439,7 @@ function ideaHtml() {
   </section>`;
 }
 
-/* ---------------- 施工 ---------------- */
+// view: build
 function timelineHtml(p) {
   if (!p || !state.logs.length) {
     return `<div class="empty" style="margin-top:12px">${esc(COPY.emptyBuildHint)}</div>`;
@@ -598,7 +590,7 @@ function buildHtml() {
   </section>`;
 }
 
-/* ---------------- 验收 ---------------- */
+// view: review
 function currentDecision(p) {
   const list = p.decisions || [];
   if (!list.length) return null;
@@ -724,7 +716,7 @@ function reviewHtml() {
   ;
 }
 
-/* ---------------- 我的 ---------------- */
+// view: profile
 function historyRowsHtml() {
   const items = (state.projects || []).slice(0, 5);
   if (!items.length) return `<div class="empty" style="padding:20px;border:0">还没有历史脑洞。</div>`;
@@ -827,7 +819,7 @@ function profileHtml() {
 }
 
 function bindPageEvents() {
-  // 委托在 document 上统一处理，这里只做页面级水合
+  // delegated at document level; page handlers are bound here
 }
 
 document.addEventListener('click', (ev) => {
@@ -981,7 +973,7 @@ document.addEventListener('input', (ev) => {
   }
 });
 
-/* ---------------- 动作 ---------------- */
+// actions
 function dispatchIdea() {
   const input = document.getElementById('composer-input');
   const text = (input ? input.value : state.draft).trim();
@@ -1136,7 +1128,7 @@ function clearAll() {
   toast('本机数据已清空');
 }
 
-/* ---------------- 施工队抽屉 / 浮层 ---------------- */
+// crew sheet
 function sheetHtml({ mobile = true } = {}) {
   const p = state.project;
   const agents = deriveAgents(p);
@@ -1180,7 +1172,7 @@ function openCrewSheet() {
     }
     if (ev.target.closest('[data-nav]')) { close(); }
   });
-  // 下拉关闭
+  // drag to close
   let startY = null;
   const body = sheet.querySelector('.sheet-body');
   body.addEventListener('touchstart', (e) => { startY = body.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
@@ -1196,7 +1188,7 @@ function openCrewSheet() {
     else sheet.style.transform = '';
     startY = null;
   });
-  // 焦点锁
+  // focus trap
   setTimeout(() => document.getElementById('close-sheet')?.focus(), 60);
 }
 
@@ -1251,7 +1243,7 @@ function closeDrawer() {
   setTimeout(() => { drawer.remove(); if (scrim) scrim.remove(); }, 230);
 }
 
-/* ---------------- ⌘K ---------------- */
+// command palette
 function paletteItems() {
   const base = [
     { label: '脑洞 · 把你的脑洞交给施工队', hint: '#/idea', route: 'idea' },
@@ -1348,7 +1340,7 @@ function closePalette() {
   ui.palette = null;
 }
 
-/* ---------------- Toast ---------------- */
+// toast
 function toast(message, kind = '') {
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
@@ -1358,7 +1350,7 @@ function toast(message, kind = '') {
   setTimeout(() => el.remove(), 3500);
 }
 
-/* ---------------- 水合：iframe / 时间 ---------------- */
+// iframe mount + clock
 function hydrate() {
   const p = state.project;
   const frame = document.getElementById('artifact-frame');
@@ -1378,7 +1370,7 @@ function updateRelativeTimes() {
   });
 }
 
-/* ---------------- 项目切换读取 ---------------- */
+// project switching
 function safeReadProject(id) {
   if (state.project && state.project.id === id) return state.project;
   try {
@@ -1389,7 +1381,7 @@ function safeReadProject(id) {
   }
 }
 
-/* ---------------- 心跳 ---------------- */
+// heartbeat
 async function pollHeartbeat() {
   const hb = await heartbeat();
   if (hb.ok) {
@@ -1401,7 +1393,7 @@ async function pollHeartbeat() {
   if (state.route === 'profile' || state.route === 'idea') renderPage();
 }
 
-/* ---------------- 启动 ---------------- */
+// boot
 function boot() {
   loadTheme();
   loadState();

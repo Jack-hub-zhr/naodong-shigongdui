@@ -1,9 +1,9 @@
-/* 真实施工队编排：产品 → 开发 → 审查 → (返工) → 裁决 → 取悦
-   所有模型调用走 /api/complete；审查结论由本地断言决定，不靠模型投票。 */
+// pipeline: product -> builder -> reviewer -> decision -> delight
+// 所有模型调用走 /api/complete，审查结论由本地断言决定。
 
 import { stageOf, callsToday } from './store.js';
 
-/* ---------------- 提示词 ---------------- */
+// prompts
 const COMMON = `你在「ForgeCrew 脑洞施工队」里工作。用户只提交一句自然语言脑洞，施工队把它落地成可直接运行的成品。
 统一术语：总监 / 产品 / 开发 / 审查 / 取悦；施工日志、验收台、裁决点、返工、成品。
 不要解释过程，不要输出多余前后缀，严格按要求格式输出。`;
@@ -94,7 +94,7 @@ export function delightUser(p) {
 请输出取悦声明 JSON。`;
 }
 
-/* ---------------- 解析与规整 ---------------- */
+// parse + normalize
 export function parseJsonLoose(text) {
   const trimmed = String(text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   const start = trimmed.indexOf('{');
@@ -217,7 +217,7 @@ export function normalizeDelight(raw) {
   return cleaned.slice(0, 5);
 }
 
-/* ---------------- 审查断言（唯一判定） ---------------- */
+// review checks
 export const CHECK_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
 
 export function inspect(html, spec) {
@@ -277,7 +277,7 @@ export function failedIds(report) {
   return (report?.findings || []).filter((f) => !f.passed).map((f) => f.id);
 }
 
-/* ---------------- 运行期小工具 ---------------- */
+// runtime helpers
 function startAgent(p, key, base) {
   p.agentRuntime = p.agentRuntime || {};
   const rt = (p.agentRuntime[key] = p.agentRuntime[key] || {});
@@ -334,7 +334,7 @@ async function callModel(p, deps, args) {
   return result;
 }
 
-/* ---------------- 主流程 ---------------- */
+// main loop
 export async function advance(p, deps) {
   let guard = 0;
   while (guard++ < 50) {

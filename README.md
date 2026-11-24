@@ -1,165 +1,86 @@
 # ForgeCrew
 
-> One idea in. A crew ships it. · 一瞬脑洞，Agent 施工队试错到验收。
+一句话脑洞进，施工队拆解、开发、自检、返工，只在关键分叉停下来问一次。
 
-**线上体验：https://forgecrew-studio.onrender.com**（UI 静态站）· API 由 Render 服务端托管（`/api/complete`）。
+线上：https://forgecrew-studio.onrender.com
 
-用户只写一句话，施工队（多 Agent）在后台拆解、生成、程序化审查、返工，只在 2—3 个裁决点停下来让用户点一下。交付时附一份「取悦声明」，逐条对照用户原话。
+## 技术栈
 
-- 技术栈：React Native 0.88 + Expo SDK 58 + TypeScript
-- 支持：iOS / Android / Web 预览
-- 包名：`com.naodongshigong.app`
+- 前端：原生 HTML / CSS / JS，无构建框架
+- 后端：Node.js（`server/index.mjs`），只暴露 `POST /api/complete`
+- 部署：Render 静态站 + Web 服务，GitHub Actions 定时保活
 
----
-
-## 1. 快速开始
+## 本地运行
 
 ```bash
-npm install
-
-# 可选：接入真实免费 API
-cp .env.example .env
-# 编辑 .env，填入 EXPO_PUBLIC_GROQ_API_KEY 等
-
-npx expo start          # 扫码 / 模拟器
-npx expo start --web    # 浏览器预览（App 会被限制在 560px 手机宽度）
-npx expo start --android
-npx expo start --ios
+npm run build:web
+node server/index.mjs
+# http://localhost:3000
 ```
 
-没有填任何 Key 时，App 会自动进入 **DEMO_MODE**，用预置脚本跑通完整闭环，适合直接体验。
-
-类型检查与 Web 构建：
+只调接口、不启前端：
 
 ```bash
-npx tsc --noEmit
-npx expo export --platform web   # 产物在 dist/
+PORT=3001 node server/index.mjs
+curl localhost:3001/healthz
 ```
 
----
+## 环境变量
 
-## 2. 免费 API 的获取与限额
+| 变量 | 说明 |
+| --- | --- |
+| `DEEPSEEK_API_KEY` | 可选，配置后优先走 DeepSeek |
+| `DEEPSEEK_BASE_URL` | 可选，默认官方地址 |
+| `FREE_BASE_URL` / `FREE_MODEL` | 可选，覆盖默认免费通道 |
+| `PORT` | 服务端口，默认 3000 |
 
-| 提供商 | 角色定位 | 免费模型 | RPM | RPD | 获取方式 |
-|---|---|---|---|---|---|
-| Groq | 产品 / 开发（快速试错轮） | Llama 3.3 70B | 30 | 14,400 | [console.groq.com/keys](https://console.groq.com/keys) → 登录 → Create API Key → `gsk_...` |
-| Google Gemini | 调度 / 审查（质量轮） | Gemini 2.5 Flash | 5 | 1,500 | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → Get API key（无需绑卡） |
-| NVIDIA NIM | 故障转移兜底 | Llama 3.3 70B / Nemotron | 40 | 1,000（本项目保守值） | [build.nvidia.com](https://build.nvidia.com) → 注册 → Get API Key |
+密钥只在服务端读取，浏览器不保存、不转发。
 
-> Gemini 在中国大陆、港澳不在可用地区列表，需要代理或海外网络环境。
-> Expo 客户端只读取 `EXPO_PUBLIC_` 前缀变量，请把 Key 填到 `.env` 的 `EXPO_PUBLIC_*_API_KEY` 中。
+## 路由
 
-### 端点是 OpenAI 兼容还是原生
+`/`、`/idea`、`/build`、`/review`、`/profile`
 
-- Groq：`https://api.groq.com/openai/v1`（OpenAI 兼容）
-- NVIDIA NIM：`https://integrate.api.nvidia.com/v1`（OpenAI 兼容）
-- Gemini：`https://generativelanguage.googleapis.com/v1beta`（原生 `generateContent`）
+中文别名：`/脑洞`、`/施工`、`/验收`、`/我的`
 
----
+`scripts/build-web.mjs` 会为每个路由生成独立 `index.html`，托管端没有 rewrite 时深链接也能直接打开。
 
-## 3. 限流、退避与故障转移（代码位置）
-
-核心实现：`src/ai/client.ts`、`src/ai/providers.ts`。
-
-1. **服务端托管**：浏览器只调用同源的 `/api/complete`，DeepSeek Key 保存在服务器环境变量中，不下发到前端。
-2. **429 指数退避**：`1s → 2s → 4s → …`，单次上限 30 秒；每轮最多重试 3 次，不立即失败。
-3. **串行施工**：全局只有一个施工队列（`CrewStore.pump`），一次只跑一个脑洞。
-4. **服务波动 → PAUSED**：连续失败时任务进入 `PAUSED`，日志写明原因，可手动继续。
-5. **无积分/额度门槛**：产品层不展示、不拦截任何额度或积分。
-
----
-
-## 4. 施工队：工种边界与模型路由
-
-| 工种 | 职责 | 允许做 | 禁止做 | 首选 → 兜底 |
-|---|---|---|---|---|
-| 调度工种 Orchestrator | 拆解、派发、暂停、回退、交付 | 状态机与调度 | 不写规格、不写代码、不做检查 | Gemini → Groq → NIM |
-| 产品工种 Product | 把原话翻译成功能规格与裁决点 | 输出 `Spec` | 不改代码 | Groq → Gemini → NIM |
-| 开发工种 Builder | 按规格产出单文件 HTML | 写/改产物 | 不改规格 | Groq → Gemini → NIM |
-| 审查工种 Reviewer | 程序化检查并报告 | 运行 11 项 regex/结构检查 | 不改代码、不改规格、不以模型投票代替检查 | Gemini → NIM |
-
-同源偏见保护：审查工种会读取开发工种实际使用的模型家族，并跳过同家族提供商。例如 Builder 用 Llama（Groq），Reviewer 就走 Gemini；Gemini 不可用时退到 NVIDIA 的 Nemotron。
-
-状态机（`src/state/store.ts`）：
+## 目录
 
 ```
-PENDING → BUILDING → REVIEWING → AWAITING_USER → REWORKING → DELIVERED
-                             ↘ PAUSED（额度耗尽 / 无 Key / 连续故障）
+web/
+  index.html          入口
+  css/app.css         设计 token + 双主题
+  js/main.js          路由、页面渲染、状态台、抽屉
+  js/store.js         项目状态机与 localStorage 持久化
+  js/pipeline.js      五角色编排、审查断言、暂停/续跑
+  js/api.js           /api/complete 客户端
+  js/config.js        品牌、文案、标签
+server/index.mjs      API、静态资源、健康检查
+scripts/build-web.mjs 静态构建
+.github/workflows/    keepalive
 ```
 
-要点：
+## 接口
 
-- 每个脑洞最多自检 3 轮；仍不通过则标注「已知风险」交给用户，不无限循环。
-- 裁决点逐个人工确认，选择后继续构建；「让施工队再试一版」只刷新当前裁决点的方案文案，不推倒重来。
-- 最终验收点「提交返工单」会回退到最近一个已裁决点，自动翻转到另一条路径重建。
-- 施工日志里带决策点 A / B 标记的条目可点击回退（施工进行中会提示等这一轮结束）。
+`POST /api/complete`
 
----
-
-## 5. 四个 Tab
-
-| Tab | 内容 |
-|---|---|
-| 脑洞 | 多行输入、标签（工具 / 小游戏 / 页面 / 自动化 / 其他）、示例、最近脑洞；按钮「施工队进场」 |
-| 施工 | 实时施工日志（时间戳 + 工种标签）、状态 Stepper、裁决点回退、PAUSED / 待验收提示 |
-| 验收 | 裁决卡（选 A / 选 B / 让施工队再试一版）、最终验收卡（可交互预览 + 取悦声明 + 验收通过 / 提交返工单） |
-| 我的 | 三家额度、演示模式开关、额度模拟、历史脑洞筛选、导出 / 分享、重置 |
-
----
-
-## 6. DEMO_MODE
-
-`EXPO_PUBLIC_DEMO_MODE`：
-
-- `true`：强制预置脚本，不调 API。
-- `false`：强制真实 API。
-- 留空：没有配置任何 Key 时自动为 `true`，否则 `false`。
-
-演示脚本覆盖 5 种标签的成品，首轮会故意缺失 1—2 个验收标准，触发审查失败与返工，再补齐通过，用来展示「试错」而不是「一次生成」。
-
----
-
-## 7. 目录结构
-
-```
-App.tsx                     App 壳：SafeArea / 导航 / 通知条 / 启动页
-src/
-  brand.ts                  品牌字段与工种名
-  theme.ts                  色板、间距、字号
-  copy.ts                   全部 UI 文案
-  types.ts                  项目、日志、规格、裁决点等类型
-  navigation/RootTabs.tsx   4 个 Tab + 验收角标
-  screens/                  脑洞 / 施工 / 验收 / 我的
-  state/
-    store.ts                施工队状态机、队列、持久化、全部用户动作
-    CrewProvider.tsx        useSyncExternalStore 绑定
-  ai/
-    providers.ts            提供商配置、角色路由、同源偏见过滤
-    quota.ts                RPM/RPD 令牌桶
-    client.ts               真实请求、退避、故障转移
-    prompts.ts              四类提示词与宽松 JSON 解析
-    reviewer.ts             程序化审查
-    crew.ts                 四个工种的执行封装
-  demo/
-    content.ts              规格、裁决点、取悦声明等演示数据
-    html.ts                 5 套可交互成品 HTML
-  services/                 通知、导出 / 分享
-  ui/                       组件（裁决卡、最终验收卡、日志、预览等）
+```json
+{
+  "role": "BUILDER",
+  "system": "...",
+  "user": "...",
+  "json": false,
+  "temperature": 0.7,
+  "maxTokens": 3800
+}
 ```
 
----
+返回 `{ text, provider, model, family }`；错误按 `AUTH / QUOTA / RATE_LIMIT / NETWORK / PARSE` 分类。
 
-## 8. 安全提示
+`GET /healthz` 返回当前通道与运行时长，用于保活和排障。
 
-Expo 的 `EXPO_PUBLIC_*` 变量会被打进客户端包，任何人解包都能看到。本项目按大赛 / 本地演示场景设计，Key 只放免费层。若要上架生产环境，请把 API 调用移到自己的后端代理，客户端只拿短期令牌。
+## 部署
 
----
-
-## 9. 打包
-
-```bash
-npx eas-cli@latest build -p android --profile preview
-npx eas-cli@latest build -p ios --profile preview
-```
-
-首次使用需 `eas login` 与 `eas init`。`app.json` 已配置包名、图标、启动图、通知权限说明与 splash 背景色。
+- 静态站发布 `dist/`，构建命令 `npm ci && npm run build:web`
+- Web 服务启动命令 `node server/index.mjs`，健康检查 `/healthz`
+- `.github/workflows/keepalive.yml` 每 10 分钟 ping 一次，避开免费实例冷却
