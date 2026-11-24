@@ -734,6 +734,13 @@ class CrewStore {
 
   private handleFailure(entry: QueueEntry, error: unknown): void {
     if (error instanceof AllProvidersFailedError) {
+      if (!this.state.demoMode) {
+        this.patch({ demoMode: true });
+        this.log(entry.id, 'SYSTEM', COPY.logs.engineFallback, 'INFO');
+        this.save();
+        this.enqueue(entry.id, entry.task);
+        return;
+      }
       if (error.quotaExhausted) {
         this.pause(entry.id, entry.task, 'QUOTA', COPY.logs.pausedQuota);
       } else if (error.noProvider) {

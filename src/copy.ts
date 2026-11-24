@@ -235,6 +235,7 @@ export const COPY = {
     failover: (from: string, to: string, reason: string) => `系统：${from} 不可用（${reason}），切换到 ${to}`,
     demoEngine: '系统：演示模式已开启，施工队使用预置脚本',
     realEngine: '系统：真实 API 模式，施工通道由服务端调度',
+    engineFallback: '系统：真实通道暂时不可用，已自动切到演示成品，施工继续',
     providerDone: (provider: string, role: string) => `系统：${role}调用 ${provider} 完成`,
     configMissing: '系统：未配置任何 API Key，请在 .env 中填入后重启',
     restart: '系统：施工队重启，继续上一轮施工',
