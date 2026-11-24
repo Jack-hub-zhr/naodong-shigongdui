@@ -975,6 +975,7 @@ document.addEventListener('keydown', (ev) => {
 
 document.addEventListener('input', (ev) => {
   if (ev.target.id === 'composer-input') {
+    setTimeout(() => ev.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
     state.draft = ev.target.value;
     try { localStorage.setItem(KEYS.draft, JSON.stringify(state.draft)); } catch (e) {}
   }
@@ -1155,6 +1156,7 @@ function sheetHtml({ mobile = true } = {}) {
 }
 
 function openCrewSheet() {
+  document.body.classList.add('sheet-open');
   if (ui.sheet) return;
   const scrim = document.createElement('div');
   scrim.className = 'scrim';
@@ -1199,6 +1201,7 @@ function openCrewSheet() {
 }
 
 function closeCrewSheet() {
+  document.body.classList.remove('sheet-open');
   if (!ui.sheet) return;
   const { scrim, sheet, opener } = ui.sheet;
   ui.sheet = null;
@@ -1209,6 +1212,7 @@ function closeCrewSheet() {
 }
 
 function openDrawer() {
+  document.body.classList.add('sheet-open');
   const scrim = document.createElement('div');
   scrim.className = 'scrim';
   const drawer = document.createElement('div');
@@ -1238,6 +1242,7 @@ function openDrawer() {
 }
 
 function closeDrawer() {
+  document.body.classList.remove('sheet-open');
   const drawer = overlayRoot.querySelector('.drawer');
   const scrim = overlayRoot.querySelector('.scrim');
   if (!drawer) return;

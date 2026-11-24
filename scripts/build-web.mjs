@@ -13,7 +13,7 @@ await cp(src, out, { recursive: true });
 // 静态站点 SPA 回退：把四个路由写成独立 index.html 副本，
 // 即使托管端 rewrite 失效，深链接也能 200。
 const index = await readFile(resolve(out, 'index.html'), 'utf8');
-for (const route of ['idea', 'build', 'review', 'profile']) {
+for (const route of ['idea', 'build', 'review', 'profile', '我的', '脑洞', '施工', '验收']) {
   const dir = resolve(out, route);
   await mkdir(dir, { recursive: true });
   await writeFile(resolve(dir, 'index.html'), index);
