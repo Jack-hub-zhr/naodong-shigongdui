@@ -1010,7 +1010,7 @@ function dispatchIdea() {
   try { localStorage.removeItem(KEYS.draft); } catch (e) {}
   const project = newProject(text, state.tag);
   project.spec = null;
-  project.saluteUntil = Date.now() + 8000;
+  project.saluteUntil = Date.now() + 15000;
   project.saluteKind = 'start';
   setRoute('build');
   renderAll();

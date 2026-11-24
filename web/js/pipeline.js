@@ -682,7 +682,7 @@ export async function advance(p, deps) {
         p.status = 'DELIVERED';
         p.stage = stageOf('DELIVERED');
         p.phase = 'polish';
-        p.saluteUntil = Date.now() + 8000;
+        p.saluteUntil = Date.now() + 15000;
         p.saluteKind = 'done';
         stopAgent(p, 'orch', 100);
         stopAgent(p, 'builder', 100);
