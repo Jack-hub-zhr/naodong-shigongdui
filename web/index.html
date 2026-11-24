@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ForgeCrew · 脑洞施工队</title>
+<meta name="description" content="一句话就够。施工队会自己拆解、试错、返工，只在关键分叉停下来问你。">
+<meta name="theme-color" content="#0A0A0B">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./css/app.css">
+<script>
+  // 主题先于渲染，避免闪白
+  (function () {
+    var user = 'system';
+    try { user = localStorage.getItem('fc-theme-user') || 'dark'; } catch (e) {}
+    var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    var theme = user === 'system' ? system : user;
+    if (theme !== 'light' && theme !== 'dark') theme = 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme-user', user);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#F5F4F0' : '#0A0A0B');
+  })();
+</script>
+</head>
+<body>
+  <div id="app" class="app" data-route="idea">
+    <aside class="rail" id="rail" aria-label="主导航"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div class="workspace" id="workspace" tabindex="-1">
+        <div class="page" id="page"></div>
+      </div>
+    </main>
+    <aside class="crew" id="crew" aria-label="施工队状态台"></aside>
+  </div>
+  <nav class="tabbar" id="tabbar" aria-label="移动端导航"></nav>
+  <div id="overlay-root"></div>
+  <div class="toasts" id="toast-root" aria-live="polite"></div>
+  <div id="palette-root"></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

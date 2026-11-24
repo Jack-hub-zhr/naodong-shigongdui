@@ -33,7 +33,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web && node scripts/patch-web.mjs",
+    "build:web": "node scripts/build-web.mjs",
     "typecheck": "tsc --noEmit",
     "serve": "node server/index.mjs"
   },

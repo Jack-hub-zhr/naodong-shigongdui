@@ -7,6 +7,8 @@ const DIST_DIR = resolve(process.cwd(), 'dist');
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const FREE_URL = process.env.FREE_BASE_URL?.trim() || 'https://text.pollinations.ai/openai';
 const FREE_MODEL = process.env.FREE_MODEL?.trim() || 'openai';
+const GITHUB_MODELS_URL = process.env.GITHUB_MODELS_URL?.trim() || 'https://models.github.ai/inference/chat/completions';
+const GITHUB_MODELS_MODEL = process.env.GITHUB_MODELS_MODEL?.trim() || 'openai/gpt-4o-mini';
 const MAX_BODY_BYTES = 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 75_000;
 const MAX_RETRIES = 3;
@@ -213,6 +215,18 @@ function activeProvider() {
       jsonMode: true,
     };
   }
+  const githubToken = process.env.GITHUB_MODELS_TOKEN?.trim();
+  if (githubToken) {
+    return {
+      id: 'github',
+      name: 'GitHub 模型通道',
+      family: 'OpenAI',
+      model: GITHUB_MODELS_MODEL,
+      url: GITHUB_MODELS_URL,
+      key: githubToken,
+      jsonMode: true,
+    };
+  }
   return {
     id: 'free',
     name: '免费通道',
@@ -406,18 +420,27 @@ async function handleRequest(req, res) {
     throw new ApiError(400, 'HTTP', '请求 URL 无效');
   }
 
-  if (pathname === '/health') {
-    if (req.method !== 'GET') {
-      throw new ApiError(405, 'HTTP', '请求方法不允许', { Allow: 'GET' });
+  if (pathname === '/health' || pathname === '/healthz') {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      throw new ApiError(405, 'HTTP', '请求方法不允许', { Allow: 'GET, HEAD' });
     }
     const provider = activeProvider();
-    sendJson(res, 200, {
+    const payload = {
       ok: true,
-      configured: true,
+      service: 'api',
       provider: provider.id,
       providerName: provider.name,
       model: provider.model,
-    });
+      ts: new Date().toISOString(),
+      uptimeSec: Math.round(process.uptime()),
+    };
+    res.setHeader('Cache-Control', 'no-store');
+    if (req.method === 'HEAD') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end();
+      return;
+    }
+    sendJson(res, 200, payload);
     return;
   }
 
