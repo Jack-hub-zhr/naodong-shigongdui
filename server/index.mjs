@@ -300,7 +300,7 @@ async function completeUpstream(input) {
         try {
           payload = JSON.parse(raw);
         } catch {
-          throw new ApiError(502, 'PARSE', `${provider.name} 返回了无效 JSON`);
+          throw new ApiError(502, 'PARSE', `${provider.name} 返回了无效 JSON：${String(raw).slice(0, 120)}`);
         }
 
         const text = payload?.choices?.[0]?.message?.content;
