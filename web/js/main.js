@@ -400,7 +400,7 @@ function ideaHtml() {
 
   return `
   <div class="eyebrow">01 <i>·</i> 新想法</div>
-  <h1 class="page-title">${COPY.title.idea}</h1>
+  <h1 class="page-title idea-title">${COPY.title.idea}</h1>
   <p class="page-lead">${COPY.lead.idea}</p>
 
   <div class="idea-grid">
