@@ -370,24 +370,24 @@ export function agentAction(p, key, st) {
     },
     product: {
       working: `第 ${round} 轮 · 把这句话拆成 4 条验收标准`,
-      done: '交出 4 条验收标准 · 预埋 1 个关键分叉',
+      done: '交给阿码：4 条验收标准 + 1 个关键分叉',
       standby: '等阿岚派工',
     },
     builder: {
       working: p.phase === 'rework' || (p.reworkOrder && p.phase === 'build')
         ? `第 ${round} 轮修正 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
         : `第 ${round} 轮产出 · 先跑一遍再交出去`,
-      done: `第 ${round} 轮版本已交出`, 
+      done: `交给尺子：第 ${round} 轮 HTML`, 
       standby: '等小满写规格',
     },
     reviewer: {
       reviewing: '逐条跑 12 项检查，只列必改项',
-      done: p.report?.passed ? '12 项检查全部通过' : `记录了 ${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
+      done: p.report?.passed ? '交给阿岚：12 项全通过' : `交给阿岚：${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
       standby: '等产物，预载 12 项检查',
     },
     pleaser: {
       working: '收字号、收颜色、补一次得分动效',
-      done: '打磨完成，交出成品与说明',
+      done: '交给你：成品 + 做了什么',
       standby: '功能通过后进入最后一公里',
     },
   };
