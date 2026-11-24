@@ -1,7 +1,7 @@
 // app entry: routing, views, crew panel, sheet, command palette
 
 import {
-  BRAND, COPY, ICONS, LOGO_SVG, ROLES, TAGS, RECIPES, API,
+  BRAND, COPY, ICONS, LOGO_SVG, ROLES, TAGS, RECIPES, API, STYLES,
 } from './config.js';
 import {
   state, KEYS, STAGES, STATUS, loadTheme, loadState, saveNow, scheduleSave,
@@ -11,7 +11,7 @@ import {
   normalizeRoute,
 } from './store.js';
 import { complete, heartbeat, ApiError } from './api.js';
-import { advance, resumeFromPause, inspect } from './pipeline.js';
+import { advance, resumeFromPause, inspect, applyBaseStyle } from './pipeline.js';
 
 const railEl = document.getElementById('rail');
 const topbarEl = document.getElementById('topbar');
@@ -32,6 +32,8 @@ const ui = {
   cleared: false,
   decisionIndex: 0,
   follow: false,
+  advanced: false,
+  logsOpen: false,
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -114,7 +116,7 @@ async function runEngine({ resume = false } = {}) {
     await advance(p, deps());
   } catch (err) {
     console.error('[crew]', err);
-    toast('施工队异常：' + (err?.message || '未知错误'), 'err');
+    toast('团队异常：' + (err?.message || '未知错误'), 'err');
     if (p.status !== 'PAUSED') {
       p.status = 'PAUSED';
       p.pausedReason = 'ERROR';
@@ -136,7 +138,7 @@ function resumeIfNeeded() {
   if (p.status === 'PAUSED') {
     if (p.nextRetryAt && Date.now() >= p.nextRetryAt) {
       resumeFromPause(p);
-      addLog(p, 'SYSTEM', '通道恢复，施工队续跑', null);
+      addLog(p, 'SYSTEM', '服务连接恢复，团队续跑', null);
       saveNow();
       runEngine();
     }
@@ -145,9 +147,9 @@ function resumeIfNeeded() {
   const active = ['intake', 'plan', 'build', 'review', 'apply', 'deliver', 'polish'].includes(p.phase);
   if (active && p.status !== 'DELIVERED') {
     if (p.phase === 'polish') {
-      addLog(p, 'SYSTEM', '恢复上次未完成的取悦声明', null);
+      addLog(p, 'SYSTEM', '恢复上次未完成的打磨说明', null);
     } else {
-      addLog(p, 'SYSTEM', '检测到未完成的施工，自动续跑', null);
+      addLog(p, 'SYSTEM', '检测到未完成的制作，自动续跑', null);
     }
     runEngine({ resume: true });
   }
@@ -173,18 +175,8 @@ function navCount(route) {
 function renderRail() {
   const p = state.project;
   const agents = deriveAgents(p);
-  const active = state.route;
-  const recent = (state.projects || []).slice(0, 3);
-  const link = (route, icon) => {
-    const label = COPY.nav[route];
-    const count = navCount(route);
-    const alert = route === 'review' && p && p.status === 'AWAITING_USER';
-    return `<button class="nav-item ${active === route ? 'active' : ''}" data-nav="${route}" type="button" aria-current="${active === route ? 'page' : 'false'}">
-      ${ICONS[route]}<span>${label}</span>
-      ${alert ? '<span class="dot-alert"></span>' : ''}
-      ${count ? `<span class="count">${count}</span>` : ''}
-    </button>`;
-  };
+  const recent = (state.projects || []).slice(0, 6);
+  const activeProjectId = state.route === 'build' ? p?.id : null;
   railEl.innerHTML = `
     <div class="brand" data-nav="idea" role="button" tabindex="0">
       <div class="brand-mark">${LOGO_SVG}</div>
@@ -192,28 +184,36 @@ function renderRail() {
     </div>
     <div class="rail-label">工作台</div>
     <div class="nav">
-      ${link('idea')}${link('build')}${link('review')}${link('profile')}
+      <button class="nav-item ${state.route === 'idea' ? 'active' : ''}" data-nav="idea" type="button" aria-current="${state.route === 'idea' ? 'page' : 'false'}">
+        ${ICONS.idea}<span>项目</span>${state.projects.length ? `<span class="count">${state.projects.length}</span>` : ''}
+      </button>
+      <button class="nav-item" data-new="1" type="button">
+        <span class="plus">＋</span><span>新建</span>
+      </button>
+      <button class="nav-item ${state.route === 'profile' ? 'active' : ''}" data-nav="profile" type="button" aria-current="${state.route === 'profile' ? 'page' : 'false'}">
+        ${ICONS.profile}<span>我的</span>
+      </button>
     </div>
     <div class="rail-recent">
-      <div class="head"><span>最近的脑洞</span><b>${state.projects.length}</b></div>
+      <div class="head"><span>项目</span><b>${state.projects.length}</b></div>
       ${recent.length ? recent.map((item) => `
-        <button class="item" data-open="${esc(item.id)}" type="button">
+        <button class="item ${item.id === activeProjectId ? 'active' : ''}" data-open="${esc(item.id)}" type="button">
           <span class="bullet ${item.status === 'DELIVERED' ? 'ok' : item.status === 'AWAITING_USER' ? 'wait' : ['BUILDING', 'REVIEWING', 'REWORKING'].includes(item.status) ? 'run' : ''}"></span>
           <span>${esc(item.title)}</span>
-        </button>`).join('') : '<div class="crew-empty" style="padding:6px 0;text-align:left">还没有脑洞</div>'}
+        </button>`).join('') : '<div class="crew-empty" style="padding:6px 0;text-align:left">还没有项目</div>'}
     </div>
     <div class="rail-foot">
-      <div class="row"><span class="dot ${agents.some((a) => ['working', 'thinking', 'reviewing'].includes(a.state)) ? 'run' : 'ok'}"></span>${COPY.channelShort} · ${COPY.serial}<span class="ver">${BRAND.version}</span></div>
-      <div class="row"><span>${workingCount(agents)} 名成员作业中</span></div>
+      <div class="row"><span class="dot ${agents.some((a) => ['working', 'thinking', 'reviewing'].includes(a.state)) ? 'run' : 'ok'}"></span>${COPY.channelShort}<span class="ver">${BRAND.version}</span></div>
+      <div class="row"><span>${workingCount(agents)} 名成员在忙</span></div>
     </div>`;
 }
 
 function crumbsHtml() {
   const p = state.project;
-  if (state.route === 'build' && p) {
-    return `<span>${COPY.breadcrumb}</span><span class="sep">/</span><span>${COPY.nav.build}</span><span class="sep">/</span><span class="current">${esc(p.title)}</span>`;
+  if ((state.route === 'build' || state.route === 'review') && p) {
+    return `<button class="crumb-link" data-nav="idea" type="button">项目</button><span class="sep">/</span><span class="current">${esc(p.title)}</span>`;
   }
-  return `<span>${COPY.breadcrumb}</span><span class="sep">/</span><span class="current">${COPY.nav[state.route]}</span>`;
+  return `<button class="crumb-link" data-nav="idea" type="button">项目</button><span class="sep">/</span><span class="current">${state.route === 'profile' ? '我的' : '新建'}</span>`;
 }
 
 function renderTopbar() {
@@ -226,8 +226,8 @@ function renderTopbar() {
       <button class="search-pill" id="open-palette" type="button" aria-label="搜索与命令">
         ${ICONS.search}<span>搜索</span><kbd>⌘K</kbd>
       </button>
-      <button class="crew-trigger" id="open-crew" type="button" aria-label="打开施工队状态台">
-        ${ICONS.sliders}<span class="label">施工队</span>
+      <button class="crew-trigger" id="open-crew" type="button" aria-label="打开团队状态台">
+        ${ICONS.sliders}<span class="label">团队</span>
         <span class="badge">${workingCount(agents)}</span>
       </button>
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="切换主题" title="切换暗色 / 亮色">
@@ -239,11 +239,17 @@ function renderTopbar() {
 
 function renderTabbar() {
   const p = state.project;
-  const items = ['idea', 'build', 'review', 'profile'];
-  tabbarEl.innerHTML = items.map((route) => {
-    const alert = route === 'review' && p && p.status === 'AWAITING_USER';
-    return `<button type="button" data-nav="${route}" aria-current="${state.route === route ? 'page' : 'false'}">
-      ${ICONS[route]}<span>${COPY.nav[route]}</span>
+  const items = [
+    { key: 'projects', route: 'idea', icon: 'idea', label: '项目' },
+    { key: 'new', new: true, icon: 'idea', label: '新建' },
+    { key: 'profile', route: 'profile', icon: 'profile', label: '我的' },
+  ];
+  tabbarEl.innerHTML = items.map((item) => {
+    const active = item.route && state.route === item.route;
+    const alert = item.key === 'projects' && p && p.status === 'AWAITING_USER';
+    const attr = item.new ? 'data-new="1"' : `data-nav="${item.route}"`;
+    return `<button type="button" ${attr} aria-current="${active ? 'page' : 'false'}">
+      ${item.new ? '<span class="plus tab-plus">＋</span>' : ICONS[item.icon]}<span>${item.label}</span>
       ${alert ? '<span class="badge-dot"></span>' : ''}
     </button>`;
   }).join('');
@@ -291,7 +297,7 @@ function crewBodyHtml(p, { mini = false } = {}) {
 }
 
 function dummyCards(agents, mini) {
-  return `<div class="crew-empty">施工队待命中。<br>写一句脑洞，5 名成员会立刻进场。</div>`
+  return `<div class="crew-empty">团队待命中。<br>写一句想法，5 名成员会立刻进场。</div>`
     + agents.map((a) => agentCard(a, { mini })).join('');
 }
 
@@ -300,15 +306,15 @@ function renderCrew() {
   const agents = deriveAgents(p);
   const header = `
     <div class="crew-head">
-      <div class="row"><h2>施工队</h2><span class="live"><span class="dot ${p && ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status) ? 'run' : 'ok'}"></span>${COPY.live}</span></div>
+      <div class="row"><h2>团队</h2><span class="live"><span class="dot ${p && ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status) ? 'run' : 'ok'}"></span>${COPY.live}</span></div>
       <div class="crew-sub"><span>${agents.length} 名成员</span><span>·</span><span>${workingCount(agents)} 名作业中</span><span>·</span><span>${p?.providerName || COPY.channelShort}</span></div>
     </div>`;
   const scrollTop = crewEl.querySelector('.crew-body')?.scrollTop || 0;
   crewEl.innerHTML = `${header}
     <div class="crew-body">${crewBodyHtml(p)}</div>
     <div class="crew-foot">
-      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个脑洞'}</span>
-      <span class="side"><button class="btn" data-nav="build" type="button">查看时间线</button></span>
+      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
+      <span class="side">${p ? '<button class="btn" data-nav="profile" type="button">更多记录</button>' : ''}</span>
     </div>`;
   const body = crewEl.querySelector('.crew-body');
   if (body) body.scrollTop = scrollTop;
@@ -324,7 +330,7 @@ function renderPage() {
   let html = '';
   if (state.route === 'idea') html = ideaHtml();
   else if (state.route === 'build') html = buildHtml();
-  else if (state.route === 'review') html = reviewHtml();
+  else if (state.route === 'review') html = buildHtml();
   else html = profileHtml();
   pageEl.innerHTML = html;
   workspaceEl.scrollTop = scrollTop;
@@ -377,12 +383,14 @@ function ideaHtml() {
   const p = state.project;
   const agents = deriveAgents(p);
   const online = state.heartbeat.ok !== false;
+  const styleKey = state.style || 'product';
+  const style = STYLES.find((x) => x.key === styleKey) || STYLES[2];
   const rows = projects.map((item) => `
     <tr data-open="${esc(item.id)}">
       <td class="title">${esc(item.title)}<span class="tag">${esc(item.tag)}</span></td>
-      <td class="dim">第 ${item.round || 0} 轮</td>
+      <td class="dim">${esc(item.styleLabel || STYLES.find((x) => x.key === item.style)?.label || '产品风')}</td>
       <td>${statusPillOf(item)}</td>
-      <td class="dim">${formatDateTime(item.updatedAt)}</td>
+      <td class="dim">${rel(item.updatedAt)}</td>
       <td class="go">→</td>
     </tr>`).join('');
   const mobileRows = projects.map((item) => `
@@ -392,21 +400,34 @@ function ideaHtml() {
     </button>`).join('');
 
   return `
-  <div class="eyebrow">01 <i>·</i> 新想法</div>
-  <h1 class="page-title idea-title">${COPY.title.idea}</h1>
+  <div class="eyebrow">01 <i>·</i> 项目</div>
+  <h1 class="page-title idea-title">说一句，<br>五个人把它做出来。</h1>
   <p class="page-lead">${COPY.lead.idea}</p>
+
+  <div class="promise-row"><span class="dot ok"></span><span>预计 3–8 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>只会问你 1 次</span></div>
 
   <div class="idea-grid">
     <div class="idea-main">
       <div class="composer">
-        <textarea id="composer-input" placeholder="${esc(COPY.placeholder)}" enterkeyhint="send" aria-label="脑洞输入">${esc(state.draft)}</textarea>
-        <div class="composer-tags">
-          <span class="label">标签</span>
-          <div class="chips" id="tag-chips">
-            ${TAGS.map((t) => `<button class="chip" type="button" data-tag="${t.key}" aria-pressed="${state.tag === t.key}">${t.label}</button>`).join('')}
-          </div>
-        </div>
+        <textarea id="composer-input" placeholder="${esc(COPY.placeholder)}" enterkeyhint="send" aria-label="项目想法">${esc(state.draft)}</textarea>
         <div class="composer-error" id="composer-error" hidden></div>
+        <div class="composer-advanced">
+          <button class="advanced-toggle" id="toggle-advanced" type="button" aria-expanded="${ui.advanced}">
+            <span>高级选项</span><span class="current">${style.label} · ${tagLabel(state.tag)}</span><span class="chev">${ui.advanced ? '−' : '+'}</span>
+          </button>
+          ${ui.advanced ? `<div class="advanced-body">
+            <div class="advanced-row"><span class="label">风格</span>
+              <div class="style-chips">
+                ${STYLES.map((x) => `<button class="style-chip" type="button" data-style="${x.key}" aria-pressed="${styleKey === x.key}"><b>${x.label}</b><span>${x.note}</span></button>`).join('')}
+              </div>
+            </div>
+            <div class="advanced-row"><span class="label">类型</span>
+              <div class="chips" id="tag-chips">
+                ${TAGS.map((t) => `<button class="chip" type="button" data-tag="${t.key}" aria-pressed="${state.tag === t.key}">${t.label}</button>`).join('')}
+              </div>
+            </div>
+          </div>` : ''}
+        </div>
         <div class="composer-foot">
           <div class="composer-hint">${ICONS.info}<span>${COPY.queueHint}</span></div>
           <button class="btn primary" id="dispatch" type="button">${COPY.dispatch} <span class="arrow">→</span></button>
@@ -414,25 +435,33 @@ function ideaHtml() {
       </div>
       <div class="flow-strip">
         <div class="flow-avatars">${agents.map((a) => `<span>${a.letter}</span>`).join('')}</div>
-        <div class="txt">${COPY.flow.replace('。', '。 ')}当前 <b>${COPY.channelShort}</b> ${online ? '在线' : '连接中'}。</div>
+        <div class="txt">阿岚拆解 · 小满定标准 · 阿码制作 · 尺子检查 · 阿润打磨。当前 <b>${COPY.channelShort}</b> ${online ? '在线' : '连接中'}。</div>
       </div>
     </div>
     <aside>
       <div class="aside-title">${COPY.recipesTitle}</div>
       <div class="recipe-list recipes">${recipeList()}</div>
+      <div class="team-mini">
+        <div class="aside-title" style="margin-top:18px">这五个人怎么接</div>
+        <div class="team-row"><b>岚</b><span>拆成 4 个场景，定 3 轮上限</span></div>
+        <div class="team-row"><b>满</b><span>写下什么算完成</span></div>
+        <div class="team-row"><b>码</b><span>先跑一遍再交出去</span></div>
+        <div class="team-row"><b>尺</b><span>只认断言，不认感觉</span></div>
+        <div class="team-row"><b>润</b><span>收字、收色、收动效</span></div>
+      </div>
     </aside>
   </div>
 
   <section class="section">
     <div class="section-head">
-      <h2>${COPY.recentTitle}</h2>
-      <span class="meta">${COPY.recentCount.replace('{n}', projects.length)}</span>
+      <h2>项目</h2>
+      <span class="meta">${projects.length} 个 · 最近更新</span>
       <span class="spacer"></span>
-      <button class="btn small" data-nav="profile" type="button">${COPY.allRecords}</button>
+      <button class="btn small" data-nav="profile" type="button">全部记录</button>
     </div>
     ${projects.length ? `
       <table class="recent-table">
-        <thead><tr><th>名称</th><th>轮次</th><th>状态</th><th>更新</th><th></th></tr></thead>
+        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="recent-rows">${mobileRows}</div>
@@ -535,73 +564,137 @@ function pauseBanner(p) {
   if (isQuotaPause(p)) {
     return `<div class="pause-banner">
       <span class="dot err"></span>
-      <span><b>免费通道额度已用完</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
+      <span><b>免费服务连接额度已用完</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
     </div>`;
   }
   return `<div class="pause-banner">
     <span class="dot err"></span>
-    <span><b>${reason.long}</b> ${secs != null ? `，施工队将在 ${secs} 秒后自动续跑` : '，请到我的页检查通道'}</span>
+    <span><b>${reason.long}</b> ${secs != null ? `，团队将在 ${secs} 秒后自动续跑` : '，请到我的页检查服务连接'}</span>
     <span class="act"><button class="btn small" id="resume-now" type="button">${COPY.retry}</button></span>
   </div>`;
 }
 
-function buildActions(p) {
+function humanStatus(p) {
+  const next = p.nextRetryAt ? formatClock(p.nextRetryAt) : '';
+  if (p.status === 'PAUSED') {
+    if (isQuotaPause(p)) return `免费额度用完了，${next ? next + ' ' : ''}自动继续，不用你点。`;
+    return `连接暂时断了，${next ? next + ' ' : ''}自动再试一次，不用你点。`;
+  }
   if (p.status === 'AWAITING_USER') {
-    return `<button class="btn" data-nav="review" type="button">${COPY.goReview}</button>
-      <button class="btn primary" data-nav="review" type="button">${p.awaitReason === 'escalate' ? '去定方向' : '去拍板'}</button>`;
+    if (p.awaitReason === 'escalate') return '同一个问题连续两轮没修好，需要你定个方向。';
+    return `需要你选一个版本 · 两个都能用，差别在${p.decisions?.[0]?.topic || '节奏'}。`;
   }
   if (p.status === 'DELIVERED') {
-    return `<button class="btn" data-nav="idea" type="button">${COPY.backToIdea}</button>
-      <button class="btn primary" data-nav="review" type="button">${COPY.goReview}</button>`;
+    const pass = p.report?.passed;
+    return `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
   }
-  if (isQuotaPause(p)) {
-    return `<button class="btn" data-nav="review" type="button">${COPY.goReview}</button>`;
+  if (p.status === 'REVIEWING') return `尺子在检查第 ${p.round} 轮：只看断言，不认感觉 · 约 30 秒出结果。`;
+  if (p.status === 'REWORKING') {
+    const why = (p.failedIds || []).slice(0, 2).map((id) => {
+      const f = (p.report?.findings || []).find((x) => x.id === id);
+      return f ? `${id} ${f.check}` : id;
+    }).join('、');
+    return `第 ${p.round} 轮修正：阿码在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
   }
-  return `<button class="btn" data-nav="review" type="button">${COPY.goReview}</button>
-    <button class="btn primary" id="advance" type="button">${p.status === 'PAUSED' ? '现在继续' : '继续推进'}</button>`;
+  if (p.status === 'BUILDING') return `阿码在第 ${p.round || 1} 轮制作 · 先自己跑一遍，约 40–60 秒后交给尺子。`;
+  return '阿岚在拆这句话：先定 3 轮上限，再交给小满写验收标准 · 约 20 秒。';
+}
+
+function stageDetailHtml(p) {
+  if (!p || p.status === 'DELIVERED' || p.status === 'AWAITING_USER') return '';
+  const idx = stageOf(p.status);
+  const defs = [
+    { no: '01', title: '理解', owner: '阿岚 → 小满', text: '把一句话拆成 4 个场景，定 3 轮上限；小满写下 4 条能检查的验收标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
+    { no: '02', title: '制作', owner: '阿码', text: '按四段结构和风格 token 写 HTML/CSS，先自己跑一遍，再把脚本补上。', items: ['色、字、距、角、影全部来自 tokens', '先交付可打开的页面，再补交互'] },
+    { no: '03', title: '检查', owner: '尺子', text: '12 项断言逐条过：结构、交互、首屏主张、对比度、三档宽度。', items: ['不过就回到第 N 轮修正，不拿感觉当结论', '只把需要你决定的点留给你'] },
+    { no: '04', title: '交付', owner: '阿润 → 你', text: '收字、收色、收动效，附上做了什么与没做什么；成品随时能带走。', items: ['打开 / 分享 / 再做一版 / 导出', '10 分钟内可撤回验收'] },
+  ];
+  return `<section class="stage-detail">
+    ${defs.map((d, i) => `<div class="stage-line ${i === idx ? 'current' : ''}">
+      <span class="no">${d.no}</span>
+      <div class="body"><div class="head"><b>${d.title}</b><span>${d.owner}</span>${i === idx ? '<em class="now">现在</em>' : ''}</div>
+      ${i === idx ? `<p>${d.text}</p><ul>${d.items.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</div>
+    </div>`).join('')}
+  </section>`;
+}
+
+function projectStyleLabel(p) {
+  return (STYLES.find((x) => x.key === (p?.style || 'product')) || STYLES[2]).label;
+}
+
+function deliverActions(p) {
+  if (p.status !== 'DELIVERED' || !p.artifact) return '';
+  const canUndo = p.deliveredAt && Date.now() - p.deliveredAt < 10 * 60_000;
+  return `<div class="deliver-actions">
+    <button class="btn primary" id="open-artifact" type="button">打开成品</button>
+    <button class="btn" id="export-artifact" type="button">导出</button>
+    <button class="btn" id="share-artifact" type="button">分享</button>
+    <button class="btn" id="another-version" type="button">再做一版</button>
+    ${canUndo ? '<button class="btn ghost" id="undo-delivery" type="button">撤回验收</button>' : ''}
+  </div>`;
+}
+
+function recordsHtml(p) {
+  const count = state.logs.length;
+  return `<section class="section records">
+    <button class="records-toggle" id="toggle-logs" type="button" aria-expanded="${ui.logsOpen}">
+      <span>过程记录</span><span class="count">${count} 条</span><span class="chev">${ui.logsOpen ? '−' : '+'}</span>
+    </button>
+    ${ui.logsOpen ? `<div class="records-body">
+      <div class="log-head">
+        <span class="dim">按轮分组 · 默认只看结论，需要时展开</span>
+        <span class="spacer" style="flex:1"></span>
+        <div class="segmented" role="tablist">
+          <button type="button" data-view="timeline" aria-selected="${state.view === 'timeline'}">${COPY.timeline}</button>
+          <button type="button" data-view="table" aria-selected="${state.view === 'table'}">${COPY.statusTable}</button>
+        </div>
+      </div>
+      ${state.view === 'timeline' ? timelineHtml(p) : statusTableHtml(p)}
+    </div>` : ''}
+  </section>`;
 }
 
 function buildHtml() {
   const p = state.project;
   if (!p) {
-    return `<div class="eyebrow">02 / 实时进度</div>
-      <h1 class="page-title">施工进度</h1>
-      <div class="empty" style="margin-top:24px"><b>${COPY.emptyBuild}</b>${COPY.emptyBuildHint}<div style="margin-top:14px"><button class="btn" data-nav="idea" type="button">${COPY.goIdea}</button></div></div>`;
+    return `<div class="eyebrow">当前项目</div>
+      <h1 class="page-title">还没有打开项目</h1>
+      <p class="page-lead">从项目列表打开一个，或者新建一句话。</p>
+      <div class="empty" style="margin-top:24px"><b>${COPY.emptyBuild}</b>${COPY.emptyBuildHint}<div style="margin-top:14px"><button class="btn primary" data-new="1" type="button">${COPY.goIdea}</button></div></div>`;
   }
+  const awaiting = p.status === 'AWAITING_USER';
   return `
-  <div class="build-head">
-    <div class="grow">
-      <div class="eyebrow">02 / 实时进度</div>
-      <div class="title-row">
-        <h1 class="page-title">${esc(p.title)}</h1>
-        ${pill(badgeOf(p.status), { PENDING: 'idle', BUILDING: 'run', REVIEWING: 'run', AWAITING_USER: 'wait', REWORKING: 'run', DELIVERED: 'ok', PAUSED: 'fail' }[p.status] || 'idle')}
-      </div>
-      <div class="meta-row">
-        <span>标签 <b>${esc(tagLabel(p.tag))}</b></span>
-        <span>轮次 <b>第 ${p.round || 0} 轮</b></span>
-        <span>通道 <b>${esc(p.providerName || COPY.channelShort)}</b></span>
-        <span>更新 <b data-rel="${p.updatedAt}">${rel(p.updatedAt)}</b></span>
-      </div>
+  <button class="back-link" data-nav="idea" type="button">← 项目</button>
+  <div class="project-head">
+    <div class="eyebrow">当前项目 · ${projectStyleLabel(p)}</div>
+    <div class="title-row">
+      <h1 class="page-title">${esc(p.title)}</h1>
+      ${pill(badgeOf(p.status), { PENDING: 'idle', BUILDING: 'run', REVIEWING: 'teal', AWAITING_USER: 'wait', REWORKING: 'run', DELIVERED: 'ok', PAUSED: 'fail' }[p.status] || 'idle')}
     </div>
-    <div class="actions">${buildActions(p)}</div>
+    <div class="status-sentence ${p.status === 'PAUSED' ? 'is-paused' : ''}">
+      <span class="dot ${p.status === 'DELIVERED' ? 'ok' : p.status === 'PAUSED' ? 'err' : awaiting ? 'wait' : 'run'}"></span>
+      <span>${humanStatus(p)}</span>
+    </div>
+    <div class="meta-row">
+      <span>第 <b>${p.round || 0} 轮</b> / 最多 ${p.maxRound || 3} 轮</span>
+      <span>更新 <b data-rel="${p.updatedAt}">${rel(p.updatedAt)}</b></span>
+      ${p.artifact ? `<span>成品 <b>${(p.artifact.html.length / 1024).toFixed(1)} KB</b></span>` : ''}
+    </div>
+    ${deliverActions(p)}
   </div>
   ${pauseBanner(p)}
   ${stepperHtml(p)}
-  <section class="section">
-    <div class="log-head">
-      <h2>施工日志</h2><span class="count">${state.logs.length} 条</span>
-      <span class="spacer" style="flex:1"></span>
-      <div class="segmented" role="tablist">
-        <button type="button" data-view="timeline" aria-selected="${state.view === 'timeline'}">${COPY.timeline}</button>
-        <button type="button" data-view="table" aria-selected="${state.view === 'table'}">${COPY.statusTable}</button>
-      </div>
-      <button class="autofollow" id="toggle-follow" type="button" aria-label="自动跟随">
-        <span class="switch" aria-checked="${state.autofollow}"></span>${COPY.autofollow}
-      </button>
-    </div>
-    ${state.view === 'timeline' ? timelineHtml(p) : statusTableHtml(p)}
-    ${p.status === 'AWAITING_USER' ? `<div class="await-bar"><span class="dot"></span><span>${p.awaitReason === 'escalate' ? '同一个问题连续两轮没修好，需要你定方向。' : '产物已通过自检，裁决点等你拍板。'}</span><span class="act"><button class="btn small" data-nav="review" type="button">${COPY.goReview}</button></span></div>` : ''}
-  </section>`;
+  ${stageDetailHtml(p)}
+  ${awaiting ? `<section class="section act-section">
+    <div class="act-label">需要你确认</div>
+    <div class="act-note">这一步只问你一次；选完就继续，不用再回来点。</div>
+    ${p.awaitReason === 'escalate' ? escalateCard(p) : decisionCard(p)}
+    ${p.artifact ? previewCard(p, { compact: true }) : ''}
+  </section>` : ''}
+  ${p.status === 'DELIVERED' ? `<section class="section act-section">
+    ${previewCard(p)}
+  </section>` : ''}
+  ${recordsHtml(p)}`;
 }
 
 // view: review
@@ -641,12 +734,12 @@ function decisionCard(p) {
     <div class="decision-context">
       <div class="quote"><span class="q">“</span>${esc(p.prompt)}<span class="q close">”</span></div>
     </div>
-    <div class="decision-sub">${esc(tagLabel(p.tag))} · 第 ${p.round} 轮 · 施工队建议在下面两个方案里二选一${d.context ? ` · ${esc(d.context)}` : ''}</div>
+    <div class="decision-sub">${esc(tagLabel(p.tag))} · 第 ${p.round} 轮 · 团队建议在下面两个方案里二选一${d.context ? ` · ${esc(d.context)}` : ''}</div>
     <div class="options" role="group" aria-label="裁决选项">
       ${opt(d.optionA, 0)}${opt(d.optionB, 1)}
     </div>
     <div class="decision-foot">
-      <span>${allChosen ? '两个裁决点都已拍板，可以继续施工' : COPY.decisionFoot}</span>
+      <span>${allChosen ? '两个需要你决定都已拍板，可以继续制作' : COPY.decisionFoot}</span>
       <span class="spacer"></span>
       <button class="btn" id="reject-plan" type="button">${COPY.reject}</button>
       <button class="btn primary" id="apply-plan" type="button" ${allChosen ? '' : 'disabled'}>${COPY.accept}</button>
@@ -665,7 +758,7 @@ function escalateCard(p) {
     <div class="decision-context">
       <div class="quote">${failed.length
         ? failed.map((f) => `<span>${f.id} · ${esc(f.check)}：${esc(f.detail)}</span>`).join('<br>')
-        : '施工队连续两轮没有通过同一项检查。'}</div>
+        : '团队连续两轮没有通过同一项检查。'}</div>
     </div>
     <div class="decision-sub">你可以再给开发一轮机会（上限放宽到第 ${p.round + 2} 轮），或先拿到当前这一版成品。</div>
     <div class="decision-foot">
@@ -677,31 +770,34 @@ function escalateCard(p) {
   </div>`;
 }
 
-function previewCard(p) {
+function previewCard(p, opts = {}) {
   const a = p.artifact;
   if (!a) return '';
-  return `<div class="preview-card">
+  const compact = Boolean(opts.compact);
+  const versions = (p.versions || []).slice(-5).reverse();
+  return `<div class="preview-card ${compact ? 'compact' : ''}">
     <div class="preview-head">
-      <h3>${COPY.latest}</h3>${pill(COPY.delivered, 'ok')}
+      <h3>${compact ? '当前版本' : '成品'}</h3>${pill(compact ? '待你确认' : '已交付', compact ? 'wait' : 'ok')}
       <span class="meta" style="font-size:10.5px;color:var(--text-3)">第 ${a.round} 轮 · ${formatDateTime(a.createdAt)} · ${(a.html.length / 1024).toFixed(1)} KB</span>
-      <span class="act"><button class="btn small" id="open-artifact" type="button">${COPY.viewNewTab}</button></span>
+      <span class="act">${compact ? `<button class="btn small" id="open-artifact" type="button">打开</button>` : ''}</span>
     </div>
+    ${versions.length > 1 ? `<div class="version-row"><span>历史版本</span>${versions.map((v) => `<button class="version-chip" data-version="${v.createdAt}" type="button">第 ${v.round} 轮${(v.revision || 1) > 1 ? ` · 第 ${v.revision} 版` : ''}${v.createdAt === a.createdAt ? ' · 当前' : ''}</button>`).join('')}</div>` : ''}
     <div class="preview-body">
       <div class="preview-frame-wrap">
         <div class="browser-chrome"><span></span><span></span><span></span><span class="url">forgecrew.app/p/${esc(p.id.slice(-6))} · round ${a.round}</span></div>
         <iframe class="preview-frame" id="artifact-frame" sandbox="allow-scripts" title="成品预览"></iframe>
       </div>
-      <div class="delight">
+      ${compact ? '' : `<div class="delight">
         <h4>${COPY.delight}</h4>
         <div class="sub">${COPY.delightSub}</div>
         ${p.delight?.length ? `<ul>${p.delight.map((d) => `<li>
           <span class="check">✓</span>
           <span><b>${esc(d.requirement || d.text || '')}</b>${esc(d.response || '')}<span>${d.kind === 'IMPLICIT' ? '隐性偏好 · 已补' : '显性要求 · 已满足'}</span></span>
         </li>`).join('')}</ul>` : `<div class="empty" style="padding:18px 0;border:0">
-          ${p.pleaserFailed ? '取悦声明生成失败。' : '取悦声明正在生成…'}
-          ${p.pleaserFailed ? '<div style="margin-top:10px"><button class="btn small" id="retry-delight" type="button">重试取悦</button></div>' : ''}
+          ${p.pleaserFailed ? '打磨说明生成失败。' : '打磨说明正在生成…'}
+          ${p.pleaserFailed ? '<div style="margin-top:10px"><button class="btn small" id="retry-delight" type="button">重试</button></div>' : ''}
         </div>`}
-      </div>
+      </div>`}
     </div>
   </div>`;
 }
@@ -710,19 +806,19 @@ function reviewHtml() {
   const p = state.project;
   if (!p) {
     return `<div class="eyebrow">03 / 关键决策</div>
-      <h1 class="page-title">验收台</h1>
+      <h1 class="page-title">项目页</h1>
       <p class="page-lead">${COPY.lead.review}</p>
       <div class="empty" style="margin-top:24px"><b>${COPY.emptyReview}</b>${COPY.emptyReviewHint}<div style="margin-top:14px"><button class="btn" data-nav="build" type="button">${COPY.seeLog}</button></div></div>`;
   }
   const awaiting = p.status === 'AWAITING_USER';
   return `
   <div class="eyebrow">03 / 关键决策</div>
-  <h1 class="page-title">验收台</h1>
+  <h1 class="page-title">项目页</h1>
   <p class="page-lead">${COPY.lead.review}</p>
   ${awaiting && p.awaitReason === 'escalate' ? escalateCard(p) : ''}
   ${awaiting && p.awaitReason !== 'escalate' ? decisionCard(p) : ''}
   ${!awaiting && p.status !== 'DELIVERED' ? `<div class="await-bar" style="margin-top:20px">
-      <span class="dot run"></span><span>施工队正在作业，第 ${p.round} 轮。裁决点会在产物通过自检后出现在这里。</span>
+      <span class="dot run"></span><span>团队正在作业，第 ${p.round} 轮。需要你决定会在产物通过自检后出现在这里。</span>
       <span class="act"><button class="btn small" data-nav="build" type="button">${COPY.goBuild}</button></span>
     </div>` : ''}
   ${p.status === 'DELIVERED' && !awaiting ? previewCard(p) : ''}
@@ -733,7 +829,7 @@ function reviewHtml() {
 // view: profile
 function historyRowsHtml() {
   const items = (state.projects || []).slice(0, 5);
-  if (!items.length) return `<div class="empty" style="padding:20px;border:0">还没有历史脑洞。</div>`;
+  if (!items.length) return `<div class="empty" style="padding:20px;border:0">还没有历史想法。</div>`;
   return items.map((item) => `
     <button class="history-row" data-open="${esc(item.id)}" type="button">
       <div class="txt"><b>${esc(item.title)}</b><span>${esc(tagLabel(item.tag))} · 第 ${item.round || 0} 轮 · ${formatDateTime(item.updatedAt)}</span></div>
@@ -770,18 +866,18 @@ function profileHtml() {
         </div>
         <div class="panel-sect">
           <div class="setting-row">
-            <div class="txt"><b>施工队敬礼</b><span>开工与交付时，5 名成员各敬一个礼</span></div>
+            <div class="txt"><b>团队敬礼</b><span>开工与交付时，5 名成员各敬一个礼</span></div>
             <div class="side"><button class="switch" data-toggle-follow type="button" aria-checked="${state.autofollow}" aria-label="自动跟随"></button></div>
           </div>
           <div class="setting-row">
-            <div class="txt"><b>验收通知</b><span>到达裁决点或交付时提醒你</span></div>
+            <div class="txt"><b>验收通知</b><span>到达需要你决定或交付时提醒你</span></div>
             <div class="side"><button class="switch" id="notify-toggle" type="button" aria-checked="false" aria-label="验收通知"></button></div>
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <h3>施工通道</h3>
+        <h3>制作服务连接</h3>
         <div class="desc">服务端统一调度，浏览器不持有密钥。</div>
         <div class="channel-row">
           <span class="dot ${hb.tone === 'fail' ? 'err' : hb.tone === 'wait' ? 'wait' : 'ok'}"></span>
@@ -790,31 +886,27 @@ function profileHtml() {
         </div>
         <div class="panel-sect">
           <div class="setting-row">
-            <div class="txt"><b>串行作业</b><span>一次只接一个脑洞，保证每一步都做到位</span></div>
+            <div class="txt"><b>串行作业</b><span>一次只接一个想法，保证每一步都做到位</span></div>
             <div class="side"><button class="switch on-locked" type="button" aria-checked="true" disabled aria-label="串行作业"></button></div>
-          </div>
-          <div class="setting-row">
-            <div class="txt"><b>演示模式</b><span>用预置脚本跑通闭环；真实通道在线时关闭</span></div>
-            <div class="side"><button class="switch" id="demo-toggle" type="button" aria-checked="false" aria-label="演示模式"></button></div>
           </div>
         </div>
         <div class="channel-foot">
           ${reason ? `上次暂停原因：${esc(reason.long)} · ${next}<br>` : ''}
-          今日调用 ${callsToday()} 次 · 单服务串行，同一时间只接一个脑洞<br>
-          <span style="color:var(--text-3)">保活每 5 分钟一次，冷启动通常 < 30 秒。</span>
+          今日调用 ${callsToday()} 次 · 单服务串行，同一时间只接一个想法<br>
+          <span style="color:var(--text-3)">07:00–23:59 每 15 分钟只保 API，冷启动通常 < 30 秒。</span>
         </div>
       </div>
     </div>
 
     <div>
       <div class="panel">
-        <div class="section-head" style="margin-bottom:10px"><h3>历史脑洞</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
+        <div class="section-head" style="margin-bottom:10px"><h3>历史想法</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
         <div class="history-tabs segmented" role="tablist">
-          ${['全部', '施工中', '待验收', '已交付', '已暂停'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
+          ${['全部', '进行中', '需要你确认', '已交付', '稍后继续'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
         </div>
         ${historyRowsHtml()}
         <div class="danger-zone">
-          <span class="txt">清空本地数据会删除所有脑洞、日志与成品，无法恢复。</span>
+          <span class="txt">清空本地数据会删除所有想法、日志与成品，无法恢复。</span>
           <span class="side"><button class="btn small ghost-danger" id="clear-start" type="button">清空数据</button></span>
         </div>
         <div id="clear-confirm-wrap"></div>
@@ -825,8 +917,8 @@ function profileHtml() {
           <div><b>${BRAND.name} · ${BRAND.version}</b><span>Agent crew · idea to acceptance</span></div>
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
-        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">DS v1</span> 双主题 · 石墨 / 纸白 · 单一暖色强调</span></div>
-        <div class="about-row"><span>推理通道</span><span class="side">${esc(p?.providerName || COPY.channelShort)} · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
+        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 双主题 · 石墨 / 纸白 · 单一暖色强调</span></div>
+        <div class="about-row"><span>生成服务</span><span class="side">${esc(p?.providerName || COPY.channelShort)} · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
     </div>
   </div>`;
@@ -837,6 +929,20 @@ function bindPageEvents() {
 }
 
 document.addEventListener('click', (ev) => {
+  const newBtn = ev.target.closest('[data-new]');
+  if (newBtn) {
+    setRoute('idea');
+    renderAll();
+    requestAnimationFrame(() => {
+      const input = document.getElementById('composer-input');
+      if (input) {
+        input.focus({ preventScroll: false });
+        input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+    return;
+  }
+
   const nav = ev.target.closest('[data-nav]');
   if (nav) {
     setRoute(nav.dataset.nav);
@@ -896,6 +1002,38 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
+  const styleBtn = ev.target.closest('[data-style]');
+  if (styleBtn) {
+    state.style = styleBtn.dataset.style || 'product';
+    try { localStorage.setItem('fc-style', state.style); } catch (e) {}
+    renderPage();
+    return;
+  }
+
+  if (ev.target.closest('#toggle-advanced')) {
+    ui.advanced = !ui.advanced;
+    renderPage();
+    return;
+  }
+
+  if (ev.target.closest('#toggle-logs')) {
+    ui.logsOpen = !ui.logsOpen;
+    renderPage();
+    return;
+  }
+
+  const versionBtn = ev.target.closest('[data-version]');
+  if (versionBtn) {
+    const p = state.project;
+    const v = (p?.versions || []).find((x) => String(x.createdAt) === versionBtn.dataset.version);
+    if (v?.html) {
+      const url = URL.createObjectURL(new Blob([applyBaseStyle(v.html, p.style)], { type: 'text/html' }));
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+    return;
+  }
+
   const themeSet = ev.target.closest('[data-theme-set]');
   if (themeSet) {
     setThemeUser(themeSet.dataset.themeSet);
@@ -923,7 +1061,7 @@ document.addEventListener('click', (ev) => {
     const d = p?.decisions?.find((x) => x.id === id);
     if (d) {
       d.chosen = d.chosen === key ? null : key;
-      addLog(p, 'USER', `裁决点 ${d.marker} 已选择 ${key} 方案：${key === 'A' ? d.optionA.label : d.optionB.label}`, null);
+      addLog(p, 'USER', `需要你决定 ${d.marker} 已选择 ${key} 方案：${key === 'A' ? d.optionA.label : d.optionB.label}`, null);
       saveNow();
       renderPage();
       renderCrew();
@@ -952,6 +1090,10 @@ document.addEventListener('click', (ev) => {
   if (ev.target.closest('#escalate-retry')) { escalateRetry(); return; }
   if (ev.target.closest('#escalate-accept')) { escalateAccept(); return; }
   if (ev.target.closest('#open-artifact')) { openArtifact(); return; }
+  if (ev.target.closest('#export-artifact')) { exportArtifact(); return; }
+  if (ev.target.closest('#share-artifact')) { shareArtifact(); return; }
+  if (ev.target.closest('#another-version')) { anotherVersion(); return; }
+  if (ev.target.closest('#undo-delivery')) { undoDelivery(); return; }
   if (ev.target.closest('#retry-delight')) { retryDelight(); return; }
   if (ev.target.closest('#clear-start')) { renderClearConfirm(); return; }
   if (ev.target.closest('#clear-cancel')) { const w = document.getElementById('clear-confirm-wrap'); if (w) w.innerHTML = ''; return; }
@@ -998,10 +1140,10 @@ function dispatchIdea() {
     errEl.hidden = false;
     errEl.textContent = msg;
   };
-  if (!text) { showError('先写一句脑洞：施工队需要一个具体目标。'); return; }
+  if (!text) { showError('先写一句想法：团队需要一个具体目标。'); return; }
   if (text.length < 6) { showError('太短了，补一句要做什么或给谁用。'); return; }
   if (state.project && ['BUILDING', 'REVIEWING', 'REWORKING', 'PAUSED'].includes(state.project.status)) {
-    showError('施工队正在作业，一次只接一个脑洞。等当前项目交付后再进场。');
+    showError('团队正在作业，一次只接一个想法。等当前项目交付后再进场。');
     return;
   }
   if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
@@ -1010,6 +1152,8 @@ function dispatchIdea() {
   try { localStorage.removeItem(KEYS.draft); } catch (e) {}
   const project = newProject(text, state.tag);
   project.spec = null;
+  project.style = state.style || 'product';
+  project.versions = [];
   project.saluteUntil = Date.now() + 15000;
   project.saluteKind = 'start';
   setRoute('build');
@@ -1022,16 +1166,16 @@ function continueNow() {
   ui.follow = true;
   const p = state.project;
   if (!p) { setRoute('idea'); renderAll(); return; }
-  if (p.status === 'AWAITING_USER') { setRoute('review'); renderAll(); return; }
+  if (p.status === 'AWAITING_USER') { setRoute('build'); renderAll(); return; }
   if (p.status === 'PAUSED') {
     resumeFromPause(p);
-    addLog(p, 'USER', '点击“现在继续”，恢复施工', null);
+    addLog(p, 'USER', '点击“现在继续”，恢复制作', null);
     saveNow();
     renderAll();
     runEngine();
     return;
   }
-  if (ui.running) { toast('施工队正在作业，请稍候'); return; }
+  if (ui.running) { toast('团队正在作业，请稍候'); return; }
   runEngine();
 }
 
@@ -1039,10 +1183,10 @@ function applyPlan() {
   const p = state.project;
   if (!p) return;
   const all = (p.decisions || []).every((d) => d.chosen);
-  if (!all) { toast('两个裁决点都要选一个方案', 'err'); return; }
+  if (!all) { toast('两个需要你决定都要选一个方案', 'err'); return; }
   p.phase = 'apply';
   p.decisionsApplied = true;
-  addLog(p, 'USER', '两个裁决点已拍板，施工队按所选方案继续', 'wait');
+  addLog(p, 'USER', '两个需要你决定已拍板，团队按所选方案继续', 'wait');
   saveNow();
   setRoute('build');
   renderAll();
@@ -1053,14 +1197,14 @@ function rejectPlan() {
   const p = state.project;
   if (!p) return;
   p.decisionsApplied = true;
-  p.round += 1;
-  p.maxRound = Math.max(p.maxRound, p.round);
+  p.revision = (p.revision || 1) + 1;
+  p.maxRound = 3;
   p.reworkOrder = '用户要求再试一版：换一种更贴近原话的表达，保留全部验收标准';
   p.phase = 'build';
   p.status = 'REWORKING';
   p.stage = stageOf('REWORKING');
   p.roundStartedAt = Date.now();
-  addLog(p, 'USER', '要求施工队再试一版', 'wait');
+  addLog(p, 'USER', '要求团队再试一版', 'wait');
   saveNow();
   setRoute('build');
   renderAll();
@@ -1071,8 +1215,8 @@ function escalateRetry() {
   const p = state.project;
   if (!p) return;
   p.escalate = false;
-  p.round += 1;
-  p.maxRound = p.round + 1;
+  p.revision = (p.revision || 1) + 1;
+  p.maxRound = 3;
   p.phase = 'build';
   p.status = 'REWORKING';
   p.stage = stageOf('REWORKING');
@@ -1104,7 +1248,7 @@ function retryDelight() {
   p.phase = 'polish';
   p.status = 'DELIVERED';
   p.stage = stageOf('DELIVERED');
-  addLog(p, 'USER', '重试取悦声明', null);
+  addLog(p, 'USER', '重试打磨说明', null);
   saveNow();
   renderPage();
   runEngine();
@@ -1113,10 +1257,76 @@ function retryDelight() {
 function openArtifact() {
   const p = state.project;
   if (!p?.artifact?.html) { toast('还没有可打开的成品', 'err'); return; }
-  const blob = new Blob([p.artifact.html], { type: 'text/html' });
+  const blob = new Blob([applyBaseStyle(p.artifact.html, p.style)], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function exportArtifact() {
+  const p = state.project;
+  if (!p?.artifact?.html) { toast('还没有可导出的成品', 'err'); return; }
+  const blob = new Blob([applyBaseStyle(p.artifact.html, p.style)], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (p.title || '成品').replace(/[\\/:*?"<>|]/g, '') + '.html';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  toast('已导出 HTML');
+}
+
+async function shareArtifact() {
+  const p = state.project;
+  if (!p?.artifact?.html) return;
+  const html = applyBaseStyle(p.artifact.html, p.style);
+  const file = new File([html], `${(p.title || '成品').slice(0, 24)}.html`, { type: 'text/html' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: p.title, text: '在浏览器里直接打开就能用。' });
+      toast('已发出这一版');
+      return;
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+    }
+  }
+  exportArtifact();
+  toast('已导出 HTML，可直接发给对方');
+}
+
+function anotherVersion() {
+  const p = state.project;
+  if (!p) return;
+  const next = newProject(p.prompt, p.tag);
+  next.style = p.style || 'product';
+  next.versions = [];
+  state.project = next;
+  state.logs = [];
+  saveNow();
+  setRoute('build');
+  renderAll();
+  runEngine();
+}
+
+function undoDelivery() {
+  const p = state.project;
+  if (!p?.artifact) return;
+  if (p.deliveredAt && Date.now() - p.deliveredAt >= 10 * 60_000) {
+    toast('超过 10 分钟，成品已归档，不能再撤回', 'err');
+    return;
+  }
+  p.status = 'AWAITING_USER';
+  p.phase = 'await';
+  p.awaitReason = 'decision';
+  p.decisionsApplied = false;
+  p.deliveredAt = null;
+  (p.decisions || []).forEach((d) => { d.chosen = null; });
+  addLog(p, 'USER', '撤回验收，回到确认步骤', 'wait');
+  saveNow();
+  renderAll();
+  toast('已撤回，可以重新选择');
 }
 
 function renderClearConfirm() {
@@ -1151,14 +1361,14 @@ function sheetHtml({ mobile = true } = {}) {
   return `${mobile ? '<div class="sheet-handle"></div>' : ''}
     <div class="sheet-head">
       <div>
-        <h2>施工队</h2>
+        <h2>团队</h2>
         <div class="sub">${agents.length} 名成员 · ${workingCount(agents)} 名作业中 · ${p?.providerName || COPY.channelShort}</div>
       </div>
-      <button class="sheet-close" id="close-sheet" type="button">收起施工队</button>
+      <button class="sheet-close" id="close-sheet" type="button">收起团队</button>
     </div>
     <div class="sheet-body">${crewBodyHtml(p, { mini: true })}</div>
     <div class="sheet-foot">
-      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个脑洞'}</span>
+      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
       <span class="side"><button class="btn" data-nav="idea" type="button">${COPY.backToIdea}</button></span>
     </div>`;
 }
@@ -1172,7 +1382,7 @@ function openCrewSheet() {
   sheet.className = 'sheet';
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-modal', 'true');
-  sheet.setAttribute('aria-label', '施工队状态台');
+  sheet.setAttribute('aria-label', '团队状态台');
   sheet.innerHTML = sheetHtml();
   overlayRoot.append(scrim, sheet);
   ui.sheet = { scrim, sheet, opener: document.activeElement };
@@ -1226,9 +1436,9 @@ function openDrawer() {
   const drawer = document.createElement('div');
   drawer.className = 'drawer';
   drawer.setAttribute('role', 'dialog');
-  drawer.setAttribute('aria-label', '施工队状态台');
+  drawer.setAttribute('aria-label', '团队状态台');
   drawer.innerHTML = `<div class="crew" style="height:100%;border-left:0;display:flex">
-      <div class="crew-head"><div class="row"><h2>施工队</h2><span class="live"><span class="dot ok"></span>LIVE</span></div>
+      <div class="crew-head"><div class="row"><h2>团队</h2><span class="live"><span class="dot ok"></span>LIVE</span></div>
       <div class="crew-sub">${deriveAgents(state.project).length} 名成员 · ${workingCount(deriveAgents(state.project))} 名作业中</div></div>
       <div class="crew-body">${crewBodyHtml(state.project, { mini: true })}</div>
       <div class="crew-foot"><span>${state.project ? `第 ${state.project.round} 轮 · ${rel(state.project.updatedAt)}` : '待命'}</span>
@@ -1262,10 +1472,10 @@ function closeDrawer() {
 // command palette
 function paletteItems() {
   const base = [
-    { label: '脑洞 · 把你的脑洞交给施工队', hint: '#/idea', route: 'idea' },
-    { label: '施工 · 实时进度与施工日志', hint: '#/build', route: 'build' },
-    { label: '验收 · 裁决点与成品', hint: '#/review', route: 'review' },
-    { label: '我的 · 外观、通道与历史', hint: '#/profile', route: 'profile' },
+    { label: '想法 · 把你的想法交给团队', hint: '#/idea', route: 'idea' },
+    { label: '制作 · 实时进度与过程记录', hint: '#/build', route: 'build' },
+    { label: '验收 · 需要你决定与成品', hint: '#/review', route: 'review' },
+    { label: '我的 · 外观、服务连接与历史', hint: '#/profile', route: 'profile' },
     { label: '切换主题（暗 / 亮）', hint: 'theme', action: 'theme' },
   ];
   const recent = (state.projects || []).slice(0, 4).map((p) => ({
@@ -1371,7 +1581,7 @@ function hydrate() {
   const p = state.project;
   const frame = document.getElementById('artifact-frame');
   if (frame && p?.artifact?.html) {
-    frame.srcdoc = p.artifact.html;
+    frame.srcdoc = applyBaseStyle(p.artifact.html, p.style);
   }
   updateRelativeTimes();
   if (state.autofollow && state.route === 'build' && ui.follow) {
@@ -1458,7 +1668,7 @@ function boot() {
 function pathToRoute(pathname) {
   const clean = decodeURIComponent(pathname || '/').replace(/\/$/, '');
   if (clean === '' || clean === '/' || clean === '/index.html') return null;
-  const map = { '/idea': 'idea', '/build': 'build', '/review': 'review', '/profile': 'profile', '/我的': 'profile', '/脑洞': 'idea', '/施工': 'build', '/验收': 'review' };
+  const map = { '/idea': 'idea', '/build': 'build', '/review': 'review', '/profile': 'profile', '/我的': 'profile', '/想法': 'idea', '/制作': 'build', '/验收': 'review' };
   return map[clean] || null;
 }
 

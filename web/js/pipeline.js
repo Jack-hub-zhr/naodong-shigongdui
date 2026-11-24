@@ -2,15 +2,16 @@
 // 所有模型调用走 /api/complete，审查结论由本地断言决定。
 
 import { stageOf, callsToday } from './store.js';
+import { STYLE_TOKENS } from './config.js';
 
 // prompts
-const COMMON = `你在「ForgeCrew 脑洞施工队」里工作。用户只提交一句自然语言脑洞，施工队把它落地成可直接运行的成品。
-统一术语：总监 / 产品 / 开发 / 审查 / 取悦；施工日志、验收台、裁决点、返工、成品。
+const COMMON = `你在「ForgeCrew 团队」里工作。用户只提交一句自然语言想法，团队把它落地成可直接运行的成品。
+统一术语：阿岚 / 小满 / 阿码 / 尺子 / 阿润；过程记录、需要你确认、第 N 轮修正、成品。
 不要解释过程，不要输出多余前后缀，严格按要求格式输出。`;
 
 export function productSystem() {
   return `${COMMON}
-你是产品。职责只有一件事：把用户脑洞翻译成可执行的功能规格，不写代码。
+你是产品。职责只有一件事：把用户想法翻译成可执行的功能规格，不写代码。
 输出 JSON，字段：
 - summary: 一句话产品概述（≤40 字）
 - goal: 用户完成的核心任务（≤30 字）
@@ -18,15 +19,15 @@ export function productSystem() {
 - outOfScope: 2-3 条“不做什么”
 - acceptance: 恰好 4 条可程序化验收的标准，每条 ≤24 字，必须能在 HTML 里检查
 - implicitPreference: 从措辞里捕捉到的一条隐性偏好（≤40 字）
-- decisions: 恰好 2 个裁决点，每个形如
+- decisions: 恰好 2 个需要你决定，每个形如
   { "topic":"裁决主题（≤10字）", "title":"A 方案… / B 方案…（≤40字）", "context":"为什么需要你拍板（≤40字）",
     "optionA": { "label":"A 方案名（≤12字）", "body":"方案说明（≤40字）", "tradeoff":"代价/收益（≤20字）" },
     "optionB": { "label":"B 方案名（≤12字）", "body":"方案说明（≤40字）", "tradeoff":"代价/收益（≤20字）" } }
-裁决点必须是产品方向上真正需要用户偏好的分叉：一个偏稳、一个更贴合用户原话里的情绪。`;
+需要你决定必须是产品方向上真正需要用户偏好的分叉：一个偏稳、一个更贴合用户原话里的情绪。`;
 }
 
 export function productUser(prompt, tag) {
-  return `用户脑洞（原话）：
+  return `用户想法（原话）：
 """${prompt}"""
 
 用户选择的标签：${tag}
@@ -157,11 +158,20 @@ function injectAppScript(html, scriptTag) {
   return html.replace(/<\/body>/i, tag + '\n</body>');
 }
 
+function styleBrief(styleKey) {
+  const map = {
+    editorial: '编辑风：纸白底 #F7F4EE、衬线大标题、单一赭红强调、大留白、细规则线；禁止渐变、玻璃拟态、密集卡片。',
+    swiss: '瑞士网格：无衬线、强左对齐、黑白灰、一个高饱和红强调、圆角 0；禁止居中排版、装饰插画、超过 12px 圆角。',
+    product: '产品风：深色或纸白外壳、8–10px 圆角、一层微阴影、一个暖黄强调、克制动效；禁止紫蓝渐变、发光边框、三种强调色。',
+  };
+  return map[styleKey] || map.product;
+}
+
 export function builderUser(p, extra = {}) {
   const spec = p.spec;
   const chosen = (p.decisions || [])
     .filter((d) => d.chosen)
-    .map((d) => `裁决点 ${d.marker}「${d.title}」→ 选择 ${d.chosen}：${d.chosen === 'A' ? d.optionA.label : d.optionB.label}`)
+    .map((d) => `需要你决定 ${d.marker}「${d.title}」→ 选择 ${d.chosen}：${d.chosen === 'A' ? d.optionA.label : d.optionB.label}`)
     .join('\n');
   return `用户原话：${p.prompt}
 标签：${p.tag}
@@ -178,15 +188,18 @@ ${chosen || '（暂无，先用最稳妥路径）'}
 
 ${builderLayout(p.tag)}
 
+视觉风格：${styleBrief(p.style)}
+硬约束：首屏必须是一个 hero 区，H1 后紧跟一句 8 字以上的 <p class="lead">；颜色、字体、圆角、阴影只用 var(--fc-*) 或 var(--bg/--surface/--ink/--text/--accent) 变量，不要另定义主色；正文不小于 14px；每屏只放一个主按钮；禁止紫蓝渐变、默认蓝链接、Lorem 与示例文本。
+
 第 ${p.round} 轮产物。
-${p.reworkOrder ? `\n返工要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
+${p.reworkOrder ? `\n修正要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
 ${extra.previous ? `\n上一轮产物（可参考，不要照抄）：\n${String(extra.previous).slice(0, 4200)}\n` : ''}
 请直接输出完整 HTML。`;
 }
 
 export function delightSystem() {
   return `${COMMON}
-你是取悦。写「取悦声明」：逐条对照用户最初原话，说明成品如何回应要求，并点出一条用户没说但你捕捉到并满足了的隐性偏好。
+你是打磨。写「打磨说明」：逐条对照用户最初原话，说明成品如何回应要求，并点出一条用户没说但你捕捉到并满足了的隐性偏好。
 输出 JSON：{"items":[{"requirement":"用户原话/要求","response":"成品如何回应","kind":"EXPLICIT"|"IMPLICIT"}]}
 要求：4 条 EXPLICIT + 1 条 IMPLICIT；每条 ≤36 字；不要编造用户没提过的功能。`;
 }
@@ -196,7 +209,7 @@ export function delightUser(p) {
 验收标准：${(p.spec.acceptance || []).join('；')}
 隐性偏好：${p.spec.implicitPreference}
 成品特性：${(p.artifact?.features || []).map((f) => f.text || f).join('；')}
-请输出取悦声明 JSON。`;
+请输出打磨说明 JSON。`;
 }
 
 // parse + normalize
@@ -318,7 +331,7 @@ export function normalizeDelight(raw) {
       response: String(x.response).slice(0, 80),
       kind: x.kind === 'IMPLICIT' ? 'IMPLICIT' : 'EXPLICIT',
     }));
-  if (cleaned.length < 2) throw new Error('取悦声明结构不完整');
+  if (cleaned.length < 2) throw new Error('打磨说明结构不完整');
   if (!cleaned.some((x) => x.kind === 'IMPLICIT')) {
     cleaned[cleaned.length - 1].kind = 'IMPLICIT';
   }
@@ -326,25 +339,27 @@ export function normalizeDelight(raw) {
 }
 
 
-function applyBaseStyle(html) {
+export function applyBaseStyle(html, styleKey = 'product') {
   if (!html || !html.includes('</head>')) return html;
+  const t = STYLE_TOKENS[styleKey] || STYLE_TOKENS.product;
   const base = `<style id="fc-base">
+:root{--fc-bg:${t.bg};--fc-surface:${t.surface};--fc-ink:${t.ink};--fc-sub:${t.sub};--fc-accent:${t.accent};--fc-line:${t.line};--fc-radius:${t.radius};--fc-shadow:${t.shadow};--fc-heading:${t.heading};--bg:${t.bg};--background:${t.bg};--surface:${t.surface};--card:${t.surface};--paper:${t.surface};--ink:${t.ink};--text:${t.ink};--fg:${t.ink};--foreground:${t.ink};--sub:${t.sub};--muted:${t.sub};--accent:${t.accent};--primary:${t.accent};--line:${t.line};--border:${t.line};--font:${t.font};--radius:${t.radius};--shadow:${t.shadow}}
 html{-webkit-text-size-adjust:100%}
 *{box-sizing:border-box}
-html body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+html body{margin:0;font-family:${t.font};line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:var(--fc-bg)!important;color:var(--fc-ink)!important}
+h1,h2,h3{font-family:${t.font};letter-spacing:-.02em}
 img,svg,video{max-width:100%}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
 html body{min-height:100dvh}
 body>:is(main,#game,#app,.app,.stage,.page,.shell){min-height:calc(100dvh - 40px)}
-:root{--accent:#FFC53D;--primary:#FFC53D;--brand:#FFC53D}
-::selection{background:rgba(232,179,59,.28)}
+::selection{background:${t.accent}33}
 </style>`;
   return html.replace('</head>', base + '</head>');
 }
 
 // review checks
-export const CHECK_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'];
+export const CHECK_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12'];
 
 export function inspect(html, spec) {
   const src = String(html || '');
@@ -396,6 +411,36 @@ export function inspect(html, spec) {
   push('A6', '脚本与完整度', open === close && sizeOk,
     open !== close ? '脚本标签未闭合' : !sizeOk ? `产物过短（${src.length} 字符），疑似未完成` : `${(src.length / 1024).toFixed(1)} KB，脚本 ${open} 段均闭合`);
 
+  const h1 = (src.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]?.replace(/<[^>]+>/g, '').trim() || '';
+  const h1End = src.search(/<\/h1>/i);
+  const lead = h1End > 0 && /<p[^>]*>[^<]{8,}<\/p>/i.test(src.slice(h1End, h1End + 900));
+  push('A7', '首屏主张', h1.length >= 2 && lead,
+    !h1 ? '首屏没有 H1' : !lead ? 'H1 后缺少一句解释' : `H1「${h1.slice(0, 28)}」+ 一句解释`);
+
+  const filler = ['placeholder', '示例文本', '这里放', '点击编辑', 'your text here', '敬请期待'];
+  const fillHit = filler.filter((t) => lower.includes(t));
+  push('A8', '无演示文本', fillHit.length === 0,
+    fillHit.length ? `残留演示文本：${fillHit.join('、')}` : '没有 Lorem / 示例文本 / 空图占位');
+
+  const imgs = src.match(/<img\b[^>]*>/gi) || [];
+  const noAlt = imgs.filter((tag) => !/\balt\s*=\s*["'][^"']+["']/i.test(tag));
+  push('A9', '图片有说明', noAlt.length === 0,
+    noAlt.length ? `${noAlt.length} 张图没有 alt` : imgs.length ? `${imgs.length} 张图都有 alt` : '没有图片，无需 alt');
+
+  const emptyish = /(?:暂无数据|暂无内容|什么都没有|no data|empty state)/i.test(src);
+  push('A10', '内容是真实的', !emptyish,
+    emptyish ? '出现空白态占位文案，请填真实内容' : '列表 / 表格 / 空态均为真实内容');
+
+  const fixedWide = src.match(/(?:^|[^-])width\s*:\s*1[2-9]\d{2}px/gi) || [];
+  const hScroll = /overflow-x\s*:\s*scroll/i.test(src);
+  push('A11', '三档不横滚', fixedWide.length === 0 && !hScroll,
+    fixedWide.length ? `存在固定超宽容器：${fixedWide.slice(0, 2).join('、')}` : hScroll ? '存在横向滚动容器' : '未发现固定超宽容器，375 / 768 / 1440 可自适应');
+
+  const defaultBlue = /color\s*:\s*(?:#0000ee|#00e|#0000ff|#007bff|blue)/i.test(src);
+  const times = /font-family\s*:[^;}]*times\s+new\s+roman/i.test(src);
+  push('A12', '不落默认样式', !defaultBlue && !times,
+    defaultBlue ? '出现默认蓝链接色' : times ? '出现 Times New Roman' : '无默认蓝链接、无 Times New Roman');
+
   return { findings, passed: findings.every((f) => f.passed) };
 }
 
@@ -444,7 +489,7 @@ function pause(p, err, deps) {
   p.status = 'PAUSED';
   freezeAll(p);
   p.updatedAt = Date.now();
-  deps.log('SYSTEM', `通道暂停：${err?.message || '未知错误'}`, 'fail');
+  deps.log('SYSTEM', `服务连接暂停：${err?.message || '未知错误'}`, 'fail');
   deps.save();
 }
 
@@ -477,9 +522,9 @@ export async function advance(p, deps) {
         p.roundStartedAt = Date.now();
         startAgent(p, 'orch', 12);
         startAgent(p, 'product', 8);
-        deps.log('ORCHESTRATOR', `收到脑洞《${p.title}》，开始拆解子任务`);
+        deps.log('ORCHESTRATOR', `收到想法《${p.title}》，开始拆解子任务`);
         deps.log('ORCHESTRATOR', '子任务已派发给 产品 / 开发 / 审查');
-        deps.log('SYSTEM', `真实通道 · ${p.providerName || '免费通道'}（服务端代理，密钥不下发浏览器）`);
+        deps.log('SYSTEM', `真实服务连接 · ${p.providerName || '免费服务连接'}（服务端代理，密钥不下发浏览器）`);
         p.updatedAt = Date.now();
         deps.save();
         break;
@@ -521,7 +566,7 @@ export async function advance(p, deps) {
         stopAgent(p, 'product', 100);
         stopAgent(p, 'orch', 62);
         deps.log('PRODUCT', `已拆解为 ${p.spec.acceptance.length} 条验收标准`, 'pass');
-        deps.log('PRODUCT', `预埋 ${p.decisions.length} 个裁决点，关键分叉交给你拍板`, 'wait');
+        deps.log('PRODUCT', `预埋 ${p.decisions.length} 个需要你决定，关键分叉交给你拍板`, 'wait');
         p.round = 1;
         p.phase = 'build';
         p.status = 'BUILDING';
@@ -572,7 +617,7 @@ export async function advance(p, deps) {
           pause(p, e, deps);
           return 'paused';
         }
-        html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)));
+        html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)), p.style);
         p.artifact = {
           round: p.round,
           title: p.title,
@@ -582,6 +627,7 @@ export async function advance(p, deps) {
           provider: res.providerName || p.providerName,
           bytes: html.length,
         };
+        p.versions = [...(p.versions || []), { round: p.round, revision: p.revision || 1, html, createdAt: Date.now() }].slice(-6);
         p.phase = 'review';
         p.status = 'REVIEWING';
         p.stage = stageOf('REVIEWING');
@@ -614,7 +660,7 @@ export async function advance(p, deps) {
             p.stage = stageOf('AWAITING_USER');
             p.awaitReason = 'decision';
             stopAgent(p, 'orch', 70);
-            deps.log('ORCHESTRATOR', '产物已通过自检，裁决点等你拍板', 'wait');
+            deps.log('ORCHESTRATOR', '产物已通过自检，需要你决定等你拍板', 'wait');
             p.updatedAt = Date.now();
             deps.save();
             return 'await';
@@ -651,15 +697,15 @@ export async function advance(p, deps) {
         p.roundStartedAt = Date.now();
         stopAgent(p, 'orch', 55);
         startAgent(p, 'orch', 55);
-        deps.log('ORCHESTRATOR', `判定返工，回退到最近裁决点，开始第 ${p.round} 轮`);
+        deps.log('ORCHESTRATOR', `判定修正，回退到最近需要你决定，开始第 ${p.round} 轮`);
         p.updatedAt = Date.now();
         deps.save();
         break;
       }
 
       case 'apply': {
-        p.round += 1;
-        p.maxRound = Math.max(p.maxRound, p.round + 1);
+        p.revision = (p.revision || 1) + 1;
+        p.maxRound = 3;
         p.decisionsApplied = true;
         p.escalate = false;
         p.phase = 'build';
@@ -680,6 +726,7 @@ export async function advance(p, deps) {
 
       case 'deliver': {
         p.status = 'DELIVERED';
+        p.deliveredAt = p.deliveredAt || Date.now();
         p.stage = stageOf('DELIVERED');
         p.phase = 'polish';
         p.saluteUntil = Date.now() + 15000;
@@ -706,7 +753,7 @@ export async function advance(p, deps) {
           });
           p.delight = normalizeDelight(parseJsonLoose(res.text));
           stopAgent(p, 'pleaser', 100);
-          deps.log('PLEASER', `取悦声明已生成（${p.delight.length} 条）`, 'pass');
+          deps.log('PLEASER', `打磨说明已生成（${p.delight.length} 条）`, 'pass');
         } catch (e) {
           if (e.kind === 'QUOTA' || e.kind === 'RATE_LIMIT') {
             pause(p, e, deps);
@@ -715,9 +762,10 @@ export async function advance(p, deps) {
           p.delight = [];
           p.pleaserFailed = true;
           stopAgent(p, 'pleaser', 0);
-          deps.log('PLEASER', `取悦声明生成失败：${e.message || '结构不完整'}，可重试`, 'fail');
+          deps.log('PLEASER', `打磨说明生成失败：${e.message || '结构不完整'}，可重试`, 'fail');
         }
         p.phase = 'done';
+        p.deliveredAt = p.deliveredAt || Date.now();
         p.stage = stageOf('DELIVERED');
         p.status = 'DELIVERED';
         p.updatedAt = Date.now();

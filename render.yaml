@@ -16,7 +16,3 @@ services:
       # 在 Render 控制台填入真实密钥，不要提交到仓库
       - key: DEEPSEEK_API_KEY
         sync: false
-      - key: GITHUB_MODELS_TOKEN
-        sync: false
-      - key: GITHUB_MODELS_MODEL
-        value: openai/gpt-4o-mini

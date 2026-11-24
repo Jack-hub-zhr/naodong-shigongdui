@@ -7,8 +7,6 @@ const DIST_DIR = resolve(process.cwd(), 'dist');
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const FREE_URL = process.env.FREE_BASE_URL?.trim() || 'https://text.pollinations.ai/openai';
 const FREE_MODEL = process.env.FREE_MODEL?.trim() || 'openai-fast';
-const GITHUB_MODELS_URL = process.env.GITHUB_MODELS_URL?.trim() || 'https://models.github.ai/inference/chat/completions';
-const GITHUB_MODELS_MODEL = process.env.GITHUB_MODELS_MODEL?.trim() || 'openai/gpt-4o-mini';
 const MAX_BODY_BYTES = 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 75_000;
 const MAX_RETRIES = 3;
@@ -212,18 +210,6 @@ function activeProvider() {
       model: 'deepseek-chat',
       url: DEEPSEEK_URL,
       key: deepseekKey,
-      jsonMode: true,
-    };
-  }
-  const githubToken = process.env.GITHUB_MODELS_TOKEN?.trim();
-  if (githubToken && process.env.GITHUB_MODELS_ENABLED === 'true') {
-    return {
-      id: 'github',
-      name: 'GitHub 模型通道',
-      family: 'OpenAI',
-      model: GITHUB_MODELS_MODEL,
-      url: GITHUB_MODELS_URL,
-      key: githubToken,
       jsonMode: true,
     };
   }

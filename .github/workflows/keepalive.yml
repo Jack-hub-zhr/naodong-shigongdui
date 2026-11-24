@@ -2,7 +2,8 @@ name: keepalive
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # 07:00–23:59 Asia/Shanghai，每 15 分钟只保 API；静态站按访问自然唤醒
+    - cron: '*/15 23,0-15 * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,6 +13,3 @@ jobs:
       - name: Ping API health
         run: |
           curl -fsS --max-time 30 https://naodong-shigongdui.onrender.com/healthz || true
-      - name: Ping static site
-        run: |
-          curl -fsS --max-time 30 https://forgecrew-studio.onrender.com/ || true

@@ -14,13 +14,13 @@ export const KEYS = {
 };
 
 export const STATUS = {
-  PENDING: '待开工',
-  BUILDING: '施工中',
-  REVIEWING: '自检中',
-  AWAITING_USER: '待验收',
-  REWORKING: '返工中',
+  PENDING: '准备中',
+  BUILDING: '制作中',
+  REVIEWING: '检查中',
+  AWAITING_USER: '需要你确认',
+  REWORKING: '修正中',
   DELIVERED: '已交付',
-  PAUSED: '已暂停',
+  PAUSED: '稍后继续',
 };
 
 export const STATUS_TONE = {
@@ -33,15 +33,15 @@ export const STATUS_TONE = {
   PAUSED: 'fail',
 };
 
-/** stage index: 0 in / 1 build / 2 review / 3 decide / 4 rework / 5 done */
+/** stage index: 0 理解 / 1 制作 / 2 检查 / 3 交付 */
 export function stageOf(status) {
   switch (status) {
     case 'PENDING': return 0;
     case 'BUILDING': return 1;
     case 'REVIEWING': return 2;
-    case 'AWAITING_USER': return 3;
-    case 'REWORKING': return 4;
-    case 'DELIVERED': return 5;
+    case 'AWAITING_USER': return 2;
+    case 'REWORKING': return 1;
+    case 'DELIVERED': return 3;
     case 'PAUSED': return 1;
     default: return 0;
   }
@@ -52,12 +52,10 @@ export function badgeOf(status) {
 }
 
 export const STAGES = [
-  { no: '01', key: 'intake', name: '进场' },
-  { no: '02', key: 'build', name: '施工' },
-  { no: '03', key: 'review', name: '自检' },
-  { no: '04', key: 'await', name: '待裁决' },
-  { no: '05', key: 'rework', name: '返工' },
-  { no: '06', key: 'deliver', name: '交付' },
+  { no: '01', key: 'understand', name: '理解' },
+  { no: '02', key: 'build', name: '制作' },
+  { no: '03', key: 'review', name: '检查' },
+  { no: '04', key: 'deliver', name: '交付' },
 ];
 
 // runtime state (not persisted)
@@ -70,6 +68,7 @@ export const state = {
   autofollow: true,
   draft: '',
   tag: '工具',
+  style: 'product',
   running: false,
   heartbeat: { lastOkAt: 0, lastTryAt: 0, ok: null, provider: '' },
   themeUser: 'dark',
@@ -164,6 +163,7 @@ export function loadState() {
   state.view = read(KEYS.view, 'timeline') === 'table' ? 'table' : 'timeline';
   state.autofollow = read('fc-autofollow', true) !== false;
   state.draft = read(KEYS.draft, '') || '';
+  state.style = read('fc-style', 'product') || 'product';
   state.heartbeat = read(KEYS.heartbeat, state.heartbeat) || state.heartbeat;
   if (state.project && !state.projects.some((p) => p.id === state.project.id)) {
     state.projects.push(snapshot(state.project));
@@ -211,6 +211,7 @@ export function newProject(prompt, tag) {
     phase: 'intake',
     autoRun: true,
     round: 0,
+    revision: 1,
     maxRound: 3,
     createdAt: now,
     updatedAt: now,
@@ -229,7 +230,7 @@ export function newProject(prompt, tag) {
     artifact: null,
     report: null,
     delight: [],
-    providerName: '免费通道',
+    providerName: '免费服务连接',
     callsToday: 0,
     agentRuntime: {},
     awaitReason: null,
@@ -349,45 +350,45 @@ function agentState(p) {
 export function agentAction(p, key, st) {
   if (!p) {
     return {
-      orch: '等待脑洞进场',
-      product: '等待总监派工',
-      builder: '等待产品规格',
-      reviewer: '等待待审产物，预载 6 项程序化检查',
-      pleaser: '交付后润色取悦声明',
+      orch: '等待新项目',
+      product: '等阿岚派工',
+      builder: '等小满写规格',
+      reviewer: '等产物，预载 12 项检查',
+      pleaser: '交付后做最后一公里打磨',
     }[key] || '待命';
   }
   if (p.status === 'PAUSED') {
-    return `已暂停 · ${pauseReasonText(p).short}`;
+    return `稍后继续 · ${pauseReasonText(p).short}`;
   }
   const round = Math.max(1, p.round);
   const map = {
     orch: {
-      thinking: p.phase === 'plan' ? '拆解脑洞并按角色派工' : `监督第 ${round} 轮产出与审查回报`,
-      blocked: p.awaitReason === 'escalate' ? '同一问题连续失败，等你定方向' : '等待你对裁决点拍板',
-      done: '本轮交付完成，等待下一个脑洞',
-      standby: '等待脑洞进场',
+      thinking: p.phase === 'plan' ? '把这句话拆成 4 个场景，定 3 轮上限' : `监督第 ${round} 轮：谁交了什么，下一步给谁`,
+      blocked: p.awaitReason === 'escalate' ? '同一问题连续失败，等你定方向' : '需要你选一个版本',
+      done: '已交付，等你打开或再做一版',
+      standby: '等待新项目',
     },
     product: {
-      working: `第 ${round} 轮 · 把脑洞翻译成 4 条验收标准`,
-      done: '规格已锁定 · 4 条验收标准、2 个裁决点',
-      standby: '等待总监派工',
+      working: `第 ${round} 轮 · 把这句话拆成 4 条验收标准`,
+      done: '交出 4 条验收标准 · 预埋 1 个关键分叉',
+      standby: '等阿岚派工',
     },
     builder: {
       working: p.phase === 'rework' || (p.reworkOrder && p.phase === 'build')
-        ? `第 ${round} 轮返工 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
-        : `第 ${round} 轮产出 · 生成首屏与可点交互`,
-      done: `第 ${round} 轮产物已提交`,
-      standby: '等待产品规格',
+        ? `第 ${round} 轮修正 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
+        : `第 ${round} 轮产出 · 先跑一遍再交出去`,
+      done: `第 ${round} 轮版本已交出`, 
+      standby: '等小满写规格',
     },
     reviewer: {
-      reviewing: '执行 6 项程序化检查并给出失败原因',
-      done: p.report?.passed ? '6 项检查全部通过' : `已记录 ${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
-      standby: '等待产物，预载 6 项程序化检查',
+      reviewing: '逐条跑 12 项检查，只列必改项',
+      done: p.report?.passed ? '12 项检查全部通过' : `记录了 ${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
+      standby: '等产物，预载 12 项检查',
     },
     pleaser: {
-      working: '对照你最初的那句话逐条自检',
-      done: '取悦声明已生成',
-      standby: '交付后润色取悦声明',
+      working: '收字号、收颜色、补一次得分动效',
+      done: '打磨完成，交出成品与说明',
+      standby: '功能通过后进入最后一公里',
     },
   };
   return (map[key] && map[key][st]) || '';
@@ -412,19 +413,19 @@ export function deriveAgents(p, now = Date.now()) {
       elapsedMs: p ? runtimeElapsed(p, key, p.status === 'PAUSED' ? p.pausedAt || now : now) : 0,
       recent: ((p && p.agentRuntime && p.agentRuntime[key]?.recent) || []).slice(0, 3),
       tone: toneOf(s),
-      model: (p && p.providerName) || '免费通道',
+      model: (p && p.providerName) || '免费服务连接',
     };
   });
 }
 
 export function stateLabel(s, key) {
   switch (s) {
-    case 'thinking': return '调度中';
-    case 'working': return '施工中';
-    case 'reviewing': return '审查中';
-    case 'blocked': return '等你拍板';
+    case 'thinking': return '正在拆解';
+    case 'working': return '正在做';
+    case 'reviewing': return '在检查';
+    case 'blocked': return '需要你';
     case 'done': return '已完成';
-    case 'paused': return '已暂停';
+    case 'paused': return '稍后继续';
     case 'standby': return key === 'reviewer' ? '排队中' : '待命';
     default: return '待命';
   }
@@ -449,8 +450,8 @@ export function workingCount(agents) {
 export function pauseReasonText(p) {
   const map = {
     QUOTA: { short: '额度不足', long: '上游额度不足' },
-    NO_PROVIDER: { short: '通道不可用', long: '当前通道不可用' },
-    ERROR: { short: '通道故障', long: '通道暂时故障' },
+    NO_PROVIDER: { short: '服务连接不可用', long: '当前服务连接不可用' },
+    ERROR: { short: '服务连接故障', long: '服务连接暂时故障' },
     NETWORK: { short: '网络异常', long: '网络异常' },
   };
   return map[p?.pausedReason] || { short: '已暂停', long: '已暂停' };
@@ -494,10 +495,10 @@ export function formatDateTime(ts) {
 }
 
 export function stageProgress(p) {
-  if (!p) return { done: 0, total: 6, pct: 0 };
-  const stage = Math.max(0, Math.min(6, (p.stage || 0) + (p.status === 'DELIVERED' ? 0 : 1)));
-  const pct = Math.round((stage / 6) * 100);
-  return { done: stage, total: 6, pct };
+  if (!p) return { done: 0, total: 4, pct: 0 };
+  const stage = Math.max(0, Math.min(4, (p.stage || 0) + (p.status === 'DELIVERED' ? 0 : 1)));
+  const pct = Math.round((stage / 4) * 100);
+  return { done: stage, total: 4, pct };
 }
 
 export function projectPct(p) {
