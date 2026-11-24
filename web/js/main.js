@@ -405,6 +405,7 @@ function ideaHtml() {
   <p class="page-lead">${COPY.lead.idea}</p>
 
   <div class="promise-row"><span class="dot ok"></span><span>预计 3–8 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>只会问你 1 次</span></div>
+  <p class="budget-note">${COPY.budgetNote}</p>
 
   <div class="idea-grid">
     <div class="idea-main">
@@ -675,6 +676,7 @@ function buildHtml() {
       <span class="dot ${p.status === 'DELIVERED' ? 'ok' : p.status === 'PAUSED' ? 'err' : awaiting ? 'wait' : 'run'}"></span>
       <span>${humanStatus(p)}</span>
     </div>
+    ${p.status === 'DELIVERED' ? `<p class="budget-note">${COPY.budgetNote}</p>` : ''}
     <div class="meta-row">
       <span>第 <b>${p.round || 0} 轮</b> / 最多 ${p.maxRound || 3} 轮</span>
       <span>更新 <b data-rel="${p.updatedAt}">${rel(p.updatedAt)}</b></span>

@@ -96,6 +96,7 @@ export const COPY = {
   dispatchShort: '开始制作',
   dispatchPending: '正在开始…',
   queueHint: '预计 3–8 分钟 · 最多 3 轮 · 只会问你 1 次',
+  budgetNote: '受团队预算限制，当前版本会先把结构和可用性做扎实，视觉细节相对克制。',
   recipesTitle: '没想好？从这三句开始',
   recentTitle: '项目',
   recentCount: '共 {n} 个',
