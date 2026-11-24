@@ -38,7 +38,7 @@ curl localhost:3001/healthz
 | --- | --- |
 | `DEEPSEEK_API_KEY` | 可选，配置后优先使用 |
 | `DEEPSEEK_BASE_URL` | 可选，默认官方地址 |
-| `FREE_BASE_URL` / `FREE_MODEL` | 可选，覆盖默认可用的免费通道 |
+| `FREE_BASE_URL` / `FREE_MODEL` | 可选，覆盖默认的团队共用服务 |
 | `PORT` | 服务端口，默认 3000 |
 
 密钥只在服务端读取，浏览器不保存、不转发。

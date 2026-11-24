@@ -564,7 +564,7 @@ function pauseBanner(p) {
   if (isQuotaPause(p)) {
     return `<div class="pause-banner">
       <span class="dot err"></span>
-      <span><b>免费服务连接额度已用完</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
+      <span><b>团队这轮预算用完了</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
     </div>`;
   }
   return `<div class="pause-banner">
@@ -577,7 +577,7 @@ function pauseBanner(p) {
 function humanStatus(p) {
   const next = p.nextRetryAt ? formatClock(p.nextRetryAt) : '';
   if (p.status === 'PAUSED') {
-    if (isQuotaPause(p)) return `免费额度用完了，${next ? next + ' ' : ''}自动继续，不用你点。`;
+    if (isQuotaPause(p)) return `团队这轮预算用完了，${next ? next + ' ' : ''}自动继续，不用你点。`;
     return `连接暂时断了，${next ? next + ' ' : ''}自动再试一次，不用你点。`;
   }
   if (p.status === 'AWAITING_USER') {

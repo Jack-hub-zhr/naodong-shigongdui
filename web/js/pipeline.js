@@ -495,7 +495,7 @@ function pause(p, err, deps) {
 
 async function callModel(p, deps, args) {
   if (typeof localStorage !== 'undefined' && callsToday() >= 80) {
-    const err = new Error('今日免费额度已用完，避免继续消耗');
+    const err = new Error('团队这轮预算已用完，避免继续消耗');
     err.kind = 'QUOTA';
     throw err;
   }
@@ -524,7 +524,7 @@ export async function advance(p, deps) {
         startAgent(p, 'product', 8);
         deps.log('ORCHESTRATOR', `收到想法《${p.title}》，开始拆解子任务`);
         deps.log('ORCHESTRATOR', '子任务已派发给 产品 / 开发 / 审查');
-        deps.log('SYSTEM', `真实服务连接 · ${p.providerName || '免费服务连接'}（服务端代理，密钥不下发浏览器）`);
+        deps.log('SYSTEM', `真实服务连接 · ${p.providerName || '团队共用服务'}（服务端代理，密钥不下发浏览器）`);
         p.updatedAt = Date.now();
         deps.save();
         break;

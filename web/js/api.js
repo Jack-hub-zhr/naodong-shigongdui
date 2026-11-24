@@ -65,7 +65,7 @@ export async function complete(req) {
       return {
         text,
         provider: data.provider || 'free',
-        providerName: data.providerName || '免费通道',
+        providerName: data.providerName || '团队共用服务',
         family: data.family || 'GPT-OSS',
         model: data.model || 'openai',
       };
@@ -94,7 +94,7 @@ export async function heartbeat() {
     return {
       ok: true,
       ts: Date.now(),
-      providerName: data.providerName || '免费通道',
+      providerName: data.providerName || '团队共用服务',
       service: data.service || 'api',
     };
   } catch (e) {

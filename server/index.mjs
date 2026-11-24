@@ -215,7 +215,7 @@ function activeProvider() {
   }
   return {
     id: 'free',
-    name: '免费通道',
+    name: '团队共用服务',
     family: 'GPT-OSS',
     model: FREE_MODEL,
     url: FREE_URL,
