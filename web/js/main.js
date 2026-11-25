@@ -1182,9 +1182,10 @@ document.addEventListener('click', (ev) => {
   }
 
   if (ev.target.closest('#toggle-theme')) {
-    const current = document.documentElement.getAttribute('data-theme');
-    setThemeUser(current === 'dark' ? 'light' : 'dark');
+    const order = { system: 'dark', dark: 'light', light: 'system' };
+    setThemeUser(order[state.themeUser] || 'system');
     renderPage();
+    toast('外观：' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[state.themeUser] || ''));
     return;
   }
 
@@ -1683,10 +1684,10 @@ function runPaletteItem(item) {
   closePalette();
   if (item.route) { setRoute(item.route); renderAll(); workspaceEl.scrollTop = 0; }
   else if (item.action === 'theme') {
-    const cur = document.documentElement.getAttribute('data-theme');
-    setThemeUser(cur === 'dark' ? 'light' : 'dark');
+    const order = { system: 'dark', dark: 'light', light: 'system' };
+    setThemeUser(order[state.themeUser] || 'system');
     renderPage();
-    toast('主题已切换');
+    toast('外观：' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[state.themeUser] || ''));
   } else if (item.id) {
     const full = safeReadProject(item.id);
     if (full) {
