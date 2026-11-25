@@ -74,6 +74,7 @@ export const state = {
   themeUser: 'system',
   lastSavedAt: 0,
   user: null,
+  authChecked: false,
   syncing: false,
   cloudSavedAt: 0,
   cloudError: '',
@@ -325,6 +326,17 @@ export function newProject(prompt, tag) {
   state.projects = [snapshot(project), ...state.projects.filter((p) => p.id !== project.id)];
   scheduleSave();
   return project;
+}
+
+export function removeProject(id) {
+  state.projects = (state.projects || []).filter((p) => p.id !== id);
+  if (state.project && state.project.id === id) {
+    state.project = null;
+    state.logs = [];
+    try { localStorage.removeItem(KEYS.project); localStorage.removeItem(KEYS.logs); } catch (e) {}
+  }
+  try { localStorage.setItem(KEYS.projects, JSON.stringify(compactProjects(state.projects))); } catch (e) {}
+  saveNow();
 }
 
 export function summarize(p) {

@@ -8,7 +8,7 @@ import {
   setRoute, setThemeUser, newProject, touch, addLog, deriveAgents, workingCount,
   badgeOf, stageOf, projectPct, stageProgress, formatClock, formatRelative,
   formatMmSs, formatDateTime, totalElapsed, pauseReasonText, callsToday, summarize,
-  normalizeRoute, setCloudSaver, applyAccountState, clearAccountData, accountPayload,
+  normalizeRoute, setCloudSaver, applyAccountState, clearAccountData, accountPayload, removeProject,
 } from './store.js';
 import {
   complete, heartbeat, ApiError, authMe, registerAccount, loginAccount, logoutAccount,
@@ -121,6 +121,7 @@ async function runEngine({ resume = false } = {}) {
   renderCrew();
   try {
     await advance(p, deps());
+    if (state.project !== p) return;
   } catch (err) {
     console.error('[crew]', err);
     toast('团队异常：' + (err?.message || '未知错误'), 'err');
@@ -134,12 +135,13 @@ async function runEngine({ resume = false } = {}) {
     }
   } finally {
     ui.running = false;
-    saveNow();
+    if (state.project === p) saveNow();
     renderAll();
   }
 }
 
 function resumeIfNeeded() {
+  if (!state.user) return;
   const p = state.project;
   if (!p || p.autoRun === false) return;
   if (p.status === 'PAUSED') {
@@ -163,6 +165,7 @@ function resumeIfNeeded() {
 }
 
 function checkPauseTimer() {
+  if (!state.user) return;
   const p = state.project;
   if (!p || p.status !== 'PAUSED') return;
   if (p.nextRetryAt && Date.now() >= p.nextRetryAt) {
@@ -369,6 +372,7 @@ function renderAll() {
   renderChrome();
   renderCrew();
   renderPage();
+  ensureAuthGate();
 }
 
 // view: idea
@@ -401,13 +405,15 @@ function ideaHtml() {
       <td class="dim">${esc(item.styleLabel || STYLES.find((x) => x.key === item.style)?.label || '产品风')}</td>
       <td>${statusPillOf(item)}</td>
       <td class="dim">${rel(item.updatedAt)}</td>
+      <td class="del-cell"><button class="task-del-x" data-del="${esc(item.id)}" type="button" aria-label="删除任务" title="删除任务">${ICONS.close}</button></td>
       <td class="go">→</td>
     </tr>`).join('');
   const mobileRows = projects.map((item) => `
-    <button class="recent-row" data-open="${esc(item.id)}" type="button">
+    <div class="recent-row" data-open="${esc(item.id)}" role="button" tabindex="0">
       <div class="txt"><b>${esc(item.title)}</b><span>${statusPillOf(item)}<span>第 ${item.round || 0} 轮</span><span>${rel(item.updatedAt)}</span></span></div>
+      <button class="task-del-x" data-del="${esc(item.id)}" type="button" aria-label="删除任务" title="删除任务">${ICONS.close}</button>
       <span class="chev">›</span>
-    </button>`).join('');
+    </div>`).join('');
 
   return `
   <div class="eyebrow">01 <i>·</i> 项目</div>
@@ -472,7 +478,7 @@ function ideaHtml() {
     </div>
     ${projects.length ? `
       <table class="recent-table">
-        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th></tr></thead>
+        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="recent-rows">${mobileRows}</div>
@@ -572,6 +578,13 @@ function pauseBanner(p) {
   if (p.status !== 'PAUSED') return '';
   const reason = pauseReasonText(p);
   const secs = p.nextRetryAt ? Math.max(0, Math.ceil((p.nextRetryAt - Date.now()) / 1000)) : null;
+  if (p.pausedReason === 'USER') {
+    return `<div class="pause-banner">
+      <span class="dot wait"></span>
+      <span><b>任务已暂停</b>，进度和已生成的版本都保留着。</span>
+      <span class="act"><button class="btn small primary" id="resume-task" type="button">继续任务</button></span>
+    </div>`;
+  }
   if (isQuotaPause(p)) {
     return `<div class="pause-banner">
       <span class="dot err"></span>
@@ -588,6 +601,7 @@ function pauseBanner(p) {
 function humanStatus(p) {
   const next = p.nextRetryAt ? formatClock(p.nextRetryAt) : '';
   if (p.status === 'PAUSED') {
+    if (p.pausedReason === 'USER') return '任务已暂停，进度已保存，随时可以继续。';
     if (isQuotaPause(p)) return `团队这轮预算用完了，${next ? next + ' ' : ''}自动继续，不用你点。`;
     return `连接暂时断了，${next ? next + ' ' : ''}自动再试一次，不用你点。`;
   }
@@ -631,6 +645,15 @@ function stageDetailHtml(p) {
 
 function projectStyleLabel(p) {
   return (STYLES.find((x) => x.key === (p?.style || 'product')) || STYLES[2]).label;
+}
+
+function taskControls(p) {
+  const pausedByUser = p.status === 'PAUSED' && p.pausedReason === 'USER';
+  const active = ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status);
+  return `<div class="task-controls">
+    ${active ? '<button class="btn small" id="pause-task" type="button">暂停任务</button>' : ''}
+    <button class="btn small task-delete" id="delete-task" type="button">删除任务</button>
+  </div>`;
 }
 
 function deliverActions(p) {
@@ -767,6 +790,7 @@ function buildHtml() {
       ${p.artifact ? `<span>成品 <b>${(p.artifact.html.length / 1024).toFixed(1)} KB</b></span>` : ''}
     </div>
     ${deliverActions(p)}
+    ${taskControls(p)}
   </div>
   ${pauseBanner(p)}
   ${stepperHtml(p)}
@@ -1039,6 +1063,29 @@ function bindPageEvents() {
 }
 
 document.addEventListener('click', (ev) => {
+  const delTask = ev.target.closest('[data-del]');
+  if (delTask) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    deleteTask(delTask.dataset.del);
+    return;
+  }
+
+  if (ev.target.closest('#pause-task')) {
+    pauseTask();
+    return;
+  }
+
+  if (ev.target.closest('#resume-task')) {
+    continueNow();
+    return;
+  }
+
+  if (ev.target.closest('#delete-task')) {
+    deleteTask();
+    return;
+  }
+
   const authClose = ev.target.closest('[data-auth-close]');
   if (authClose) {
     closeAuth();
@@ -1302,12 +1349,54 @@ function dispatchIdea() {
   runEngine();
 }
 
+function pauseTask() {
+  const p = state.project;
+  if (!p || p.status === 'PAUSED' || p.status === 'DELIVERED') return;
+  p.pausedFrom = p.status;
+  p.status = 'PAUSED';
+  p.pausedReason = 'USER';
+  p.pausedAt = Date.now();
+  p.nextRetryAt = null;
+  p.autoRun = false;
+  addLog(p, 'USER', '手动暂停任务，当前进度已保存', 'wait');
+  saveNow();
+  renderAll();
+  toast('任务已暂停，随时可以继续', 'ok');
+}
+
+function deleteTask(id) {
+  const targetId = id || state.project?.id;
+  const target = (state.projects || []).find((x) => x.id === targetId) || state.project;
+  if (!target) return;
+  const ok = window.confirm(`删除「${target.title}」？删除后本地和云端的这个任务都会移除，不能恢复。`);
+  if (!ok) return;
+  const wasCurrent = state.project?.id === targetId;
+  if (wasCurrent && ui.running) {
+    target.status = 'PAUSED';
+    target.pausedReason = 'DELETED';
+    target.autoRun = false;
+    target.nextRetryAt = null;
+  }
+  removeProject(targetId);
+  if (wasCurrent) {
+    const next = (state.projects || [])[0];
+    state.project = next ? safeReadProject(next.id) : null;
+    state.logs = state.project?.logs || [];
+    if (!state.project) setRoute('idea');
+    else setRoute(state.project.status === 'DELIVERED' ? 'review' : 'build');
+  }
+  saveNow();
+  renderAll();
+  toast('任务已删除', 'ok');
+}
+
 function continueNow() {
   ui.follow = true;
   const p = state.project;
   if (!p) { setRoute('idea'); renderAll(); return; }
   if (p.status === 'AWAITING_USER') { setRoute('build'); renderAll(); return; }
   if (p.status === 'PAUSED') {
+    p.autoRun = true;
     resumeFromPause(p);
     addLog(p, 'USER', '点击“现在继续”，恢复制作', null);
     saveNow();
@@ -1710,15 +1799,16 @@ function closePalette() {
 
 function authModalHtml() {
   const register = ui.authMode === 'register';
+  const forced = !state.user;
   return `
-  <div class="scrim auth-scrim" data-auth-close></div>
-  <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-    <button class="icon-btn auth-close" data-auth-close type="button" aria-label="关闭">${ICONS.close}</button>
+  <div class="scrim auth-scrim" ${forced ? '' : 'data-auth-close'}></div>
+  <section class="auth-modal ${forced ? 'auth-forced' : ''}" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    ${forced ? '' : `<button class="icon-btn auth-close" data-auth-close type="button" aria-label="关闭">${ICONS.close}</button>`}
     <div class="eyebrow">ACCOUNT</div>
     <h2 id="auth-title">${register ? '创建你的账号' : '登录 ForgeCrew'}</h2>
     <p class="auth-lead">${register
       ? '项目会跟着账号保存，换设备、换浏览器都能接着做。'
-      : '登录后继续你的项目；没登录也可以先用访客模式。'}</p>
+      : '登录或注册后开始使用。项目会跟着账号云端保存，换设备也能接着做。'}</p>
     <div class="auth-tabs segmented" role="tablist">
       <button type="button" data-auth-tab="login" aria-selected="${!register}">登录</button>
       <button type="button" data-auth-tab="register" aria-selected="${register}">注册</button>
@@ -1748,7 +1838,7 @@ function authModalHtml() {
 function openAuth(mode = 'login') {
   ui.authMode = mode === 'register' ? 'register' : 'login';
   ui.authBusy = false;
-  closeAuth();
+  overlayRoot.querySelector('.auth-root')?.remove();
   const wrap = document.createElement('div');
   wrap.className = 'auth-root';
   wrap.innerHTML = authModalHtml();
@@ -1759,8 +1849,24 @@ function openAuth(mode = 'login') {
   });
 }
 
-function closeAuth() {
+function closeAuth(force = false) {
+  if (!force && !state.user) return;
   overlayRoot.querySelector('.auth-root')?.remove();
+}
+
+function ensureAuthGate() {
+  if (state.user) {
+    overlayRoot.querySelector('.auth-root')?.remove();
+    return;
+  }
+  if (overlayRoot.querySelector('.auth-root')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'auth-root auth-gate';
+  wrap.innerHTML = authModalHtml();
+  overlayRoot.appendChild(wrap);
+  requestAnimationFrame(() => {
+    wrap.querySelector('input[name="email"]')?.focus({ preventScroll: true });
+  });
 }
 
 function rerenderAuth() {
@@ -1787,6 +1893,7 @@ async function hydrateAfterLogin() {
   }
   renderAll();
   hydrate();
+  resumeIfNeeded();
 }
 
 async function submitAuth(form) {
@@ -1815,7 +1922,7 @@ async function submitAuth(form) {
       ? await registerAccount({ email, name, password })
       : await loginAccount({ email, password });
     state.user = user;
-    closeAuth();
+    closeAuth(true);
     await hydrateAfterLogin();
     toast(`欢迎，${user.name}`, 'ok');
   } catch (error) {
@@ -1834,6 +1941,14 @@ async function submitAuth(form) {
 }
 
 async function handleLogout() {
+  const p = state.project;
+  if (p && ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status)) {
+    p.pausedFrom = p.status;
+    p.status = 'PAUSED';
+    p.pausedReason = 'USER';
+    p.autoRun = false;
+    p.nextRetryAt = null;
+  }
   try {
     if (state.user) await saveCloudState(accountPayload());
   } catch (e) {}
@@ -1862,9 +1977,13 @@ async function initAccount() {
       state.cloudSavedAt = Date.now();
     }
     renderAll();
+    resumeIfNeeded();
   } catch (error) {
     state.user = null;
     state.cloudError = error?.message || '';
+  } finally {
+    state.authChecked = true;
+    renderAll();
   }
 }
 
@@ -1985,7 +2104,6 @@ function boot() {
     if (state.route === 'profile') renderPage();
   });
 
-  resumeIfNeeded();
 }
 
 function pathToRoute(pathname) {
