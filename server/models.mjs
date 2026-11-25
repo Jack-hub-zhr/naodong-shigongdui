@@ -21,7 +21,7 @@ export const KEYED_PROVIDERS = [
     model: 'qwen/qwen3.8-27b',
     url: 'https://api.groq.com/openai/v1/chat/completions',
     env: 'GROQ_API_KEY',
-    jsonMode: false,
+    reasoningFormat: 'parsed',
   },
   {
     id: 'dashscope',
@@ -196,7 +196,12 @@ function buildBody(model, input, withJsonMode) {
       temperature: input.temperature,
       max_tokens: input.maxTokens,
       stream: false,
-      ...(withJsonMode && model.jsonMode !== false ? { response_format: { type: 'json_object' } } : {}),
+      ...(withJsonMode && model.jsonMode !== false
+        ? {
+            response_format: { type: 'json_object' },
+            ...(model.reasoningFormat ? { reasoning_format: model.reasoningFormat } : {}),
+          }
+        : {}),
     };
   }
 
