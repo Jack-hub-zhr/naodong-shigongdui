@@ -101,3 +101,94 @@ export async function heartbeat() {
     return { ok: false, ts: Date.now(), message: e.message };
   }
 }
+
+// ---------- account ----------
+
+const TOKEN_KEY = 'fc-token';
+
+export function authToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch (e) {}
+}
+
+async function authFetch(path, options = {}) {
+  const token = authToken();
+  const response = await fetch(API.endpoint(path), {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (response.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/register') {
+      setAuthToken('');
+    }
+    throw new ApiError(
+      payload?.error?.kind || (response.status === 401 ? 'AUTH' : 'HTTP'),
+      payload?.error?.message || `服务端返回 HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return payload;
+}
+
+export async function authMe() {
+  if (!authToken()) return null;
+  try {
+    const data = await authFetch('/api/auth/me');
+    return data?.user || null;
+  } catch (error) {
+    if (error.status === 401) return null;
+    throw error;
+  }
+}
+
+export async function registerAccount(input) {
+  const data = await authFetch('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  setAuthToken(data.token);
+  return data.user;
+}
+
+export async function loginAccount(input) {
+  const data = await authFetch('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  setAuthToken(data.token);
+  return data.user;
+}
+
+export async function logoutAccount() {
+  try {
+    await authFetch('/api/auth/logout', { method: 'POST', body: '{}' });
+  } catch (e) {}
+  setAuthToken('');
+}
+
+export async function loadCloudState() {
+  if (!authToken()) return null;
+  const data = await authFetch('/api/state');
+  return data?.state || null;
+}
+
+export async function saveCloudState(payload) {
+  if (!authToken()) return false;
+  await authFetch('/api/state', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  return true;
+}

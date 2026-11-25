@@ -71,9 +71,92 @@ export const state = {
   style: 'product',
   running: false,
   heartbeat: { lastOkAt: 0, lastTryAt: 0, ok: null, provider: '' },
-  themeUser: 'dark',
+  themeUser: 'system',
   lastSavedAt: 0,
+  user: null,
+  syncing: false,
+  cloudSavedAt: 0,
+  cloudError: '',
 };
+
+let cloudSaver = null;
+let cloudTimer = 0;
+
+export function setCloudSaver(fn) {
+  cloudSaver = typeof fn === 'function' ? fn : null;
+}
+
+function scheduleCloudSave() {
+  if (!state.user || !cloudSaver || typeof window === 'undefined') return;
+  if (cloudTimer) window.clearTimeout(cloudTimer);
+  const delay = state.running ? 9000 : 2500;
+  cloudTimer = window.setTimeout(async () => {
+    cloudTimer = 0;
+    if (!state.user || !cloudSaver) return;
+    state.syncing = true;
+    state.cloudError = '';
+    try {
+      await cloudSaver(accountPayload());
+      state.cloudSavedAt = Date.now();
+    } catch (error) {
+      state.cloudError = error?.message || '同步失败';
+    } finally {
+      state.syncing = false;
+      document.dispatchEvent(new CustomEvent('fc:cloud', { detail: { ok: !state.cloudError } }));
+    }
+  }, delay);
+}
+
+export function accountPayload() {
+  return {
+    projects: compactProjects(state.projects).map((p) => ({
+      ...p,
+      logs: (p.logs || []).slice(-60),
+    })),
+    currentId: state.project?.id || null,
+  };
+}
+
+export function mergeAccountProjects(cloudProjects) {
+  const local = state.projects || [];
+  const byId = new Map();
+  for (const p of [...cloudProjects, ...local]) {
+    if (!p || !p.id) continue;
+    const existing = byId.get(p.id);
+    if (!existing || (p.updatedAt || 0) >= (existing.updatedAt || 0)) byId.set(p.id, p);
+  }
+  return [...byId.values()].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12);
+}
+
+export function applyAccountState(cloud) {
+  const cloudProjects = Array.isArray(cloud?.projects) ? cloud.projects : [];
+  state.projects = mergeAccountProjects(cloudProjects);
+  const currentId = cloud?.currentId
+    && state.projects.some((p) => p.id === cloud.currentId)
+    ? cloud.currentId
+    : state.projects[0]?.id;
+  state.project = state.projects.find((p) => p.id === currentId) || null;
+  state.logs = (state.project?.logs || []).slice(-120);
+  if (state.project) {
+    const idx = state.projects.findIndex((p) => p.id === state.project.id);
+    if (idx !== -1) state.projects[idx] = state.project;
+  }
+  state.lastSavedAt = Date.now();
+  saveNow();
+}
+
+export function clearAccountData() {
+  state.project = null;
+  state.projects = [];
+  state.logs = [];
+  state.route = 'idea';
+  try {
+    localStorage.removeItem(KEYS.project);
+    localStorage.removeItem(KEYS.projects);
+    localStorage.removeItem(KEYS.logs);
+    localStorage.setItem(KEYS.route, JSON.stringify('idea'));
+  } catch (e) {}
+}
 
 // persistence
 function read(key, fallback) {
@@ -119,6 +202,7 @@ export function saveNow() {
   write(KEYS.logs, state.logs.slice(-220));
   write(KEYS.projects, compactProjects(state.projects));
   state.lastSavedAt = Date.now();
+  scheduleCloudSave();
 }
 
 function compactProjects(list) {
@@ -130,8 +214,8 @@ function compactProjects(list) {
 
 export function loadTheme() {
   try {
-    const user = localStorage.getItem(KEYS.themeUser) || 'dark';
-    state.themeUser = ['system', 'dark', 'light'].includes(user) ? user : 'dark';
+    const user = localStorage.getItem(KEYS.themeUser) || 'system';
+    state.themeUser = ['system', 'dark', 'light'].includes(user) ? user : 'system';
   } catch (e) {
     state.themeUser = 'dark';
   }
@@ -351,8 +435,8 @@ export function agentAction(p, key, st) {
   if (!p) {
     return {
       orch: '等待新项目',
-      product: '等阿岚派工',
-      builder: '等小满写规格',
+      product: '等统筹者派工',
+      builder: '等策划者写规格',
       reviewer: '等产物，预载 12 项检查',
       pleaser: '交付后做最后一公里打磨',
     }[key] || '待命';
@@ -370,19 +454,19 @@ export function agentAction(p, key, st) {
     },
     product: {
       working: `第 ${round} 轮 · 把这句话拆成 4 条验收标准`,
-      done: '交给阿码：4 条验收标准 + 1 个关键分叉',
-      standby: '等阿岚派工',
+      done: '交给编程者：4 条验收标准 + 1 个关键分叉',
+      standby: '等统筹者派工',
     },
     builder: {
       working: p.phase === 'rework' || (p.reworkOrder && p.phase === 'build')
         ? `第 ${round} 轮修正 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
         : `第 ${round} 轮产出 · 先跑一遍再交出去`,
-      done: `交给尺子：第 ${round} 轮 HTML`, 
-      standby: '等小满写规格',
+      done: `交给检查者：第 ${round} 轮 HTML`, 
+      standby: '等策划者写规格',
     },
     reviewer: {
       reviewing: '逐条跑 12 项检查，只列必改项',
-      done: p.report?.passed ? '交给阿岚：12 项全通过' : `交给阿岚：${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
+      done: p.report?.passed ? '交给统筹者：12 项全通过' : `交给统筹者：${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
       standby: '等产物，预载 12 项检查',
     },
     pleaser: {

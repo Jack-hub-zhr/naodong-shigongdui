@@ -8,9 +8,12 @@ import {
   setRoute, setThemeUser, newProject, touch, addLog, deriveAgents, workingCount,
   badgeOf, stageOf, projectPct, stageProgress, formatClock, formatRelative,
   formatMmSs, formatDateTime, totalElapsed, pauseReasonText, callsToday, summarize,
-  normalizeRoute,
+  normalizeRoute, setCloudSaver, applyAccountState, clearAccountData, accountPayload,
 } from './store.js';
-import { complete, heartbeat, ApiError } from './api.js';
+import {
+  complete, heartbeat, ApiError, authMe, registerAccount, loginAccount, logoutAccount,
+  loadCloudState, saveCloudState,
+} from './api.js';
 import { advance, resumeFromPause, inspect, applyBaseStyle } from './pipeline.js';
 
 const railEl = document.getElementById('rail');
@@ -34,11 +37,15 @@ const ui = {
   follow: false,
   advanced: false,
   logsOpen: false,
+  authMode: 'login',
+  authBusy: false,
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
+
+setCloudSaver(saveCloudState);
 
 const tagLabel = (k) => (TAGS.find((t) => t.key === k)?.label || k || '未分类');
 
@@ -233,7 +240,10 @@ function renderTopbar() {
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="切换主题" title="切换暗色 / 亮色">
         ${ICONS.sun}
       </button>
-      <button class="avatar" data-nav="profile" type="button" aria-label="我的">你</button>
+      <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录或注册'}">
+        <span class="avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
+        <span class="account-name">${state.user ? esc(state.user.name || state.user.email.split('@')[0]) : '登录'}</span>
+      </button>
     </div>`;
 }
 
@@ -261,7 +271,7 @@ function agentCard(a, opts = {}) {
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
   const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
-  const saluting = Boolean(state.project?.saluteUntil && Date.now() < state.project.saluteUntil);
+  const saluting = a.key === ROLES.ORCHESTRATOR.key || Boolean(state.project?.saluteUntil && Date.now() < state.project.saluteUntil);
   return `<button class="agent-card ${opts.mini ? 'mini' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">
@@ -436,7 +446,7 @@ function ideaHtml() {
       </div>
       <div class="flow-strip">
         <div class="flow-avatars">${agents.map((a) => `<span>${a.letter}</span>`).join('')}</div>
-        <div class="txt">阿岚拆解 · 小满定标准 · 阿码制作 · 尺子检查 · 阿润打磨。当前 <b>${COPY.channelShort}</b> ${online ? '在线' : '连接中'}。</div>
+        <div class="txt">统筹者拆解 · 策划者定标准 · 编程者制作 · 检查者检查 · 打磨者打磨。当前 <b>${COPY.channelShort}</b> ${online ? '在线' : '连接中'}。</div>
       </div>
     </div>
     <aside>
@@ -589,26 +599,26 @@ function humanStatus(p) {
     const pass = p.report?.passed;
     return `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
   }
-  if (p.status === 'REVIEWING') return `尺子在检查第 ${p.round} 轮：只看断言，不认感觉 · 约 30 秒出结果。`;
+  if (p.status === 'REVIEWING') return `检查者在检查第 ${p.round} 轮：只看断言，不认感觉 · 约 30 秒出结果。`;
   if (p.status === 'REWORKING') {
     const why = (p.failedIds || []).slice(0, 2).map((id) => {
       const f = (p.report?.findings || []).find((x) => x.id === id);
       return f ? `${id} ${f.check}` : id;
     }).join('、');
-    return `第 ${p.round} 轮修正：阿码在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
+    return `第 ${p.round} 轮修正：编程者在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
   }
-  if (p.status === 'BUILDING') return `阿码在第 ${p.round || 1} 轮制作 · 先自己跑一遍，约 40–60 秒后交给尺子。`;
-  return '阿岚在拆这句话：先定 3 轮上限，再交给小满写验收标准 · 约 20 秒。';
+  if (p.status === 'BUILDING') return `编程者在第 ${p.round || 1} 轮制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
+  return '统筹者在拆这句话：先定 3 轮上限，再交给策划者写验收标准 · 约 20 秒。';
 }
 
 function stageDetailHtml(p) {
   if (!p || p.status === 'DELIVERED' || p.status === 'AWAITING_USER') return '';
   const idx = stageOf(p.status);
   const defs = [
-    { no: '01', title: '理解', owner: '阿岚 → 小满', text: '把一句话拆成 4 个场景，定 3 轮上限；小满写下 4 条能检查的验收标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
-    { no: '02', title: '制作', owner: '阿码', text: '按四段结构和风格 token 写 HTML/CSS，先自己跑一遍，再把脚本补上。', items: ['色、字、距、角、影全部来自 tokens', '先交付可打开的页面，再补交互'] },
-    { no: '03', title: '检查', owner: '尺子', text: '12 项断言逐条过：结构、交互、首屏主张、对比度、三档宽度。', items: ['不过就回到第 N 轮修正，不拿感觉当结论', '只把需要你决定的点留给你'] },
-    { no: '04', title: '交付', owner: '阿润 → 你', text: '收字、收色、收动效，附上做了什么与没做什么；成品随时能带走。', items: ['打开 / 分享 / 再做一版 / 导出', '10 分钟内可撤回验收'] },
+    { no: '01', title: '理解', owner: '统筹者 → 策划者', text: '把一句话拆成 4 个场景，定 3 轮上限；策划者写下 4 条能检查的验收标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
+    { no: '02', title: '制作', owner: '编程者', text: '按四段结构和风格 token 写 HTML/CSS，先自己跑一遍，再把脚本补上。', items: ['色、字、距、角、影全部来自 tokens', '先交付可打开的页面，再补交互'] },
+    { no: '03', title: '检查', owner: '检查者', text: '12 项断言逐条过：结构、交互、首屏主张、对比度、三档宽度。', items: ['不过就回到第 N 轮修正，不拿感觉当结论', '只把需要你决定的点留给你'] },
+    { no: '04', title: '交付', owner: '打磨者 → 你', text: '收字、收色、收动效，附上做了什么与没做什么；成品随时能带走。', items: ['打开 / 分享 / 再做一版 / 导出', '10 分钟内可撤回验收'] },
   ];
   return `<section class="stage-detail">
     ${defs.map((d, i) => `<div class="stage-line ${i === idx ? 'current' : ''}">
@@ -655,6 +665,80 @@ function recordsHtml(p) {
   </section>`;
 }
 
+const CREW_ORDER = ['ORCHESTRATOR', 'PRODUCT', 'BUILDER', 'REVIEWER', 'PLEASER'];
+
+function accountDisplayName() {
+  return state.user?.name || '访客';
+}
+
+function ensureTeamChat(p) {
+  const name = accountDisplayName();
+  if (Array.isArray(p.chat) && p.chatName === name) return;
+  const ts = Date.now();
+  p.chatName = name;
+  p.chat = CREW_ORDER.map((role, i) => ({
+    id: 'c_' + (ts.toString(36)) + '_' + i,
+    role,
+    text: `向${name}敬礼！`,
+    ts: ts + i * 180,
+    salute: true,
+  }));
+  saveNow();
+}
+
+function chatMessageHtml(m) {
+  const role = ROLES[m.role] || ROLES.SYSTEM;
+  const me = m.role === 'USER';
+  return `<div class="chat-msg ${me ? 'me' : ''}">
+    <span class="chat-avatar">${esc(role.letter)}</span>
+    <div class="chat-bubble"><b>${esc(role.name)}</b><p>${esc(m.text)}</p></div>
+  </div>`;
+}
+
+function teamChatHtml(p) {
+  ensureTeamChat(p);
+  const list = (p.chat || []).slice(-30);
+  return `<section class="section team-chat" id="team-chat">
+    <div class="section-head">
+      <h2>团队聊天</h2>
+      <span class="meta">5 位成员在线 · 说一句，全队都会回应</span>
+    </div>
+    <div class="chat-log" id="team-chat-log">${list.map(chatMessageHtml).join('')}</div>
+    <form class="chat-form" id="team-chat-form">
+      <input id="team-chat-input" name="message" type="text" maxlength="120" placeholder="对团队说点什么…" autocomplete="off" aria-label="团队聊天输入">
+      <button class="btn primary" type="submit">发送</button>
+    </form>
+  </section>`;
+}
+
+function sendTeamChat(text) {
+  const p = state.project;
+  const clean = String(text || '').trim().slice(0, 120);
+  if (!p || !clean) return;
+  ensureTeamChat(p);
+  const name = accountDisplayName();
+  const now = Date.now();
+  p.chat = p.chat || [];
+  p.chat.push({ id: 'c_' + now.toString(36) + '_u', role: 'USER', text: clean, ts: now });
+  CREW_ORDER.forEach((role, i) => {
+    p.chat.push({
+      id: 'c_' + now.toString(36) + '_' + i,
+      role,
+      text: `向${name}敬礼！`,
+      ts: now + 120 + i * 120,
+      salute: true,
+    });
+  });
+  p.chat = p.chat.slice(-60);
+  saveNow();
+  renderPage();
+  hydrate();
+  requestAnimationFrame(() => {
+    const input = document.getElementById('team-chat-input');
+    if (input) input.focus({ preventScroll: true });
+  });
+}
+
 function buildHtml() {
   const p = state.project;
   if (!p) {
@@ -696,6 +780,7 @@ function buildHtml() {
   ${p.status === 'DELIVERED' ? `<section class="section act-section">
     ${previewCard(p)}
   </section>` : ''}
+  ${teamChatHtml(p)}
   ${recordsHtml(p)}`;
 }
 
@@ -860,6 +945,29 @@ function profileHtml() {
   <p class="page-lead">${COPY.lead.profile}</p>
   <div class="profile-grid">
     <div>
+      <div class="panel account-panel">
+        <h3>账号</h3>
+        <div class="account-head">
+          <span class="account-avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
+          <div class="txt">
+            <b>${state.user ? esc(state.user.name) : '还没有登录'}</b>
+            <span>${state.user
+              ? esc(state.user.email)
+              : '登录后项目跟着账号走，换一台设备也能继续。'}</span>
+          </div>
+          <span class="side">
+            ${state.user
+              ? '<button class="btn small" data-logout type="button">退出</button>'
+              : '<button class="btn small primary" data-account type="button">登录 / 注册</button>'}
+          </span>
+        </div>
+        <div class="account-foot">
+          ${state.user
+            ? `项目自动同步 · ${state.syncing ? '正在同步…' : state.cloudSavedAt ? '上次同步 ' + rel(state.cloudSavedAt) : '等待首次同步'}${state.cloudError ? ' · <span class="warn">' + esc(state.cloudError) + '</span>' : ''}`
+            : '当前是访客模式，数据只保存在这台浏览器里。'}
+        </div>
+      </div>
+
       <div class="panel">
         <h3>外观</h3>
         <div class="desc">跟随系统，或固定使用深色、亮色。</div>
@@ -931,6 +1039,35 @@ function bindPageEvents() {
 }
 
 document.addEventListener('click', (ev) => {
+  const authClose = ev.target.closest('[data-auth-close]');
+  if (authClose) {
+    closeAuth();
+    return;
+  }
+
+  const authTab = ev.target.closest('[data-auth-tab]');
+  if (authTab) {
+    ui.authMode = authTab.dataset.authTab === 'register' ? 'register' : 'login';
+    ui.authBusy = false;
+    rerenderAuth();
+    return;
+  }
+
+  if (ev.target.closest('[data-account]')) {
+    if (state.user) {
+      setRoute('profile');
+      renderAll();
+    } else {
+      openAuth('login');
+    }
+    return;
+  }
+
+  if (ev.target.closest('[data-logout]')) {
+    handleLogout();
+    return;
+  }
+
   const newBtn = ev.target.closest('[data-new]');
   if (newBtn) {
     setRoute('idea');
@@ -1568,6 +1705,168 @@ function closePalette() {
   ui.palette = null;
 }
 
+// ---------- account ----------
+
+function authModalHtml() {
+  const register = ui.authMode === 'register';
+  return `
+  <div class="scrim auth-scrim" data-auth-close></div>
+  <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button class="icon-btn auth-close" data-auth-close type="button" aria-label="关闭">${ICONS.close}</button>
+    <div class="eyebrow">ACCOUNT</div>
+    <h2 id="auth-title">${register ? '创建你的账号' : '登录 ForgeCrew'}</h2>
+    <p class="auth-lead">${register
+      ? '项目会跟着账号保存，换设备、换浏览器都能接着做。'
+      : '登录后继续你的项目；没登录也可以先用访客模式。'}</p>
+    <div class="auth-tabs segmented" role="tablist">
+      <button type="button" data-auth-tab="login" aria-selected="${!register}">登录</button>
+      <button type="button" data-auth-tab="register" aria-selected="${register}">注册</button>
+    </div>
+    <form id="auth-form" autocomplete="on" novalidate>
+      ${register ? `
+      <label class="auth-field"><span>昵称</span>
+        <input name="name" type="text" maxlength="24" placeholder="团队里怎么称呼你" autocomplete="nickname" required>
+      </label>` : ''}
+      <label class="auth-field"><span>邮箱</span>
+        <input name="email" type="email" maxlength="120" placeholder="you@example.com" autocomplete="email" required>
+      </label>
+      <label class="auth-field"><span>密码</span>
+        <input name="password" type="password" minlength="8" maxlength="128" placeholder="${register ? '至少 8 位' : '输入密码'}" autocomplete="${register ? 'new-password' : 'current-password'}" required>
+      </label>
+      <div class="auth-error" id="auth-error" role="alert"></div>
+      <button class="btn primary auth-submit" type="submit" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? '请稍候…' : (register ? '创建账号' : '登录')}</button>
+    </form>
+    <div class="auth-foot">
+      <span>${register ? '已经有账号？' : '还没有账号？'}</span>
+      <button class="link-btn" data-auth-tab="${register ? 'login' : 'register'}" type="button">${register ? '去登录' : '免费注册'}</button>
+    </div>
+    <p class="auth-note">密码只保存加密后的指纹，服务端不会读到明文。</p>
+  </section>`;
+}
+
+function openAuth(mode = 'login') {
+  ui.authMode = mode === 'register' ? 'register' : 'login';
+  ui.authBusy = false;
+  closeAuth();
+  const wrap = document.createElement('div');
+  wrap.className = 'auth-root';
+  wrap.innerHTML = authModalHtml();
+  overlayRoot.appendChild(wrap);
+  requestAnimationFrame(() => {
+    const input = wrap.querySelector('input[name="email"]');
+    if (input) input.focus({ preventScroll: true });
+  });
+}
+
+function closeAuth() {
+  overlayRoot.querySelector('.auth-root')?.remove();
+}
+
+function rerenderAuth() {
+  const wrap = overlayRoot.querySelector('.auth-root');
+  if (!wrap) return;
+  wrap.innerHTML = authModalHtml();
+  const input = wrap.querySelector('input[name="email"]');
+  if (input) input.focus({ preventScroll: true });
+}
+
+async function hydrateAfterLogin() {
+  state.syncing = true;
+  try {
+    const cloud = await loadCloudState();
+    applyAccountState(cloud);
+    await saveCloudState(accountPayload());
+    state.cloudSavedAt = Date.now();
+    state.cloudError = '';
+  } catch (error) {
+    state.cloudError = error?.message || '同步失败';
+    toast('账号已登录，但项目同步暂时失败', 'warn');
+  } finally {
+    state.syncing = false;
+  }
+  renderAll();
+  hydrate();
+}
+
+async function submitAuth(form) {
+  const errorEl = form.querySelector('#auth-error');
+  const data = new FormData(form);
+  const email = String(data.get('email') || '').trim();
+  const password = String(data.get('password') || '');
+  const name = String(data.get('name') || '').trim();
+
+  if (!email || !password) {
+    if (errorEl) errorEl.textContent = '请填写邮箱和密码';
+    return;
+  }
+  if (ui.authMode === 'register' && (!name || password.length < 8)) {
+    if (errorEl) errorEl.textContent = '昵称不能为空，密码至少 8 位';
+    return;
+  }
+
+  ui.authBusy = true;
+  rerenderAuth();
+  const busyForm = document.querySelector('#auth-form');
+  if (busyForm) busyForm.dataset.mode = ui.authMode;
+
+  try {
+    const user = ui.authMode === 'register'
+      ? await registerAccount({ email, name, password })
+      : await loginAccount({ email, password });
+    state.user = user;
+    closeAuth();
+    await hydrateAfterLogin();
+    toast(`欢迎，${user.name}`, 'ok');
+  } catch (error) {
+    ui.authBusy = false;
+    rerenderAuth();
+    const freshError = document.querySelector('#auth-error');
+    const freshForm = document.querySelector('#auth-form');
+    if (freshError) freshError.textContent = error?.message || '登录失败，请稍后重试';
+    if (freshForm) {
+      freshForm.querySelector('input[name="email"]').value = email;
+      if (freshForm.querySelector('input[name="name"]')) {
+        freshForm.querySelector('input[name="name"]').value = name;
+      }
+    }
+  }
+}
+
+async function handleLogout() {
+  try {
+    if (state.user) await saveCloudState(accountPayload());
+  } catch (e) {}
+  await logoutAccount();
+  clearAccountData();
+  state.user = null;
+  state.cloudSavedAt = 0;
+  state.cloudError = '';
+  renderAll();
+  toast('已退出登录，云端项目仍保留', 'ok');
+}
+
+async function initAccount() {
+  try {
+    const user = await authMe();
+    if (!user) {
+      state.user = null;
+      state.cloudSavedAt = 0;
+      return;
+    }
+    state.user = user;
+    const cloud = await loadCloudState();
+    applyAccountState(cloud);
+    if (!(cloud?.projects || []).length && accountPayload().projects.length) {
+      await saveCloudState(accountPayload());
+      state.cloudSavedAt = Date.now();
+    }
+    renderAll();
+  } catch (error) {
+    state.user = null;
+    state.cloudError = error?.message || '';
+  }
+}
+
 // toast
 function toast(message, kind = '') {
   const el = document.createElement('div');
@@ -1584,6 +1883,13 @@ function hydrate() {
   const frame = document.getElementById('artifact-frame');
   if (frame && p?.artifact?.html) {
     frame.srcdoc = applyBaseStyle(p.artifact.html, p.style);
+  }
+  const chatLog = document.getElementById('team-chat-log');
+  if (chatLog) {
+    const toBottom = () => { chatLog.scrollTop = chatLog.scrollHeight; };
+    toBottom();
+    requestAnimationFrame(toBottom);
+    setTimeout(toBottom, 60);
   }
   updateRelativeTimes();
   if (state.autofollow && state.route === 'build' && ui.follow) {
@@ -1621,6 +1927,19 @@ async function pollHeartbeat() {
   if (state.route === 'profile' || state.route === 'idea') renderPage();
 }
 
+document.addEventListener('submit', (ev) => {
+  if (ev.target?.id === 'team-chat-form') {
+    ev.preventDefault();
+    const input = document.getElementById('team-chat-input');
+    sendTeamChat(input?.value);
+    if (input) input.value = '';
+    return;
+  }
+  if (ev.target?.id !== 'auth-form') return;
+  ev.preventDefault();
+  submitAuth(ev.target);
+});
+
 // boot
 function boot() {
   loadTheme();
@@ -1637,6 +1956,7 @@ function boot() {
   renderAll();
   updateRouteFromLocation();
   hydrate();
+  initAccount();
 
   // 计时：状态台实时
   setInterval(() => {

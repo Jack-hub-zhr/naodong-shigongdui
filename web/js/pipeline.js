@@ -6,7 +6,7 @@ import { STYLE_TOKENS } from './config.js';
 
 // prompts
 const COMMON = `你在「ForgeCrew 团队」里工作。用户只提交一句自然语言想法，团队把它落地成可直接运行的成品。
-统一术语：阿岚 / 小满 / 阿码 / 尺子 / 阿润；过程记录、需要你确认、第 N 轮修正、成品。
+统一术语：统筹者 / 策划者 / 编程者 / 检查者 / 打磨者；过程记录、需要你确认、第 N 轮修正、成品。
 不要解释过程，不要输出多余前后缀，严格按要求格式输出。`;
 
 export function productSystem() {

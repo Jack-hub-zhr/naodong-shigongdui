@@ -28,11 +28,11 @@ export const ICONS = {
 };
 
 export const ROLES = {
-  ORCHESTRATOR: { key: 'orch', name: '阿岚', letter: '岚', en: '总监', color: 'run' },
-  PRODUCT: { key: 'product', name: '小满', letter: '满', en: '产品', color: 'ok' },
-  BUILDER: { key: 'builder', name: '阿码', letter: '码', en: '开发', color: 'run' },
-  REVIEWER: { key: 'reviewer', name: '尺子', letter: '尺', en: '审查', color: 'teal' },
-  PLEASER: { key: 'pleaser', name: '阿润', letter: '润', en: '打磨', color: 'idle' },
+  ORCHESTRATOR: { key: 'orch', name: '统筹者', letter: '统', en: '协调', color: 'run' },
+  PRODUCT: { key: 'product', name: '策划者', letter: '策', en: '规格', color: 'ok' },
+  BUILDER: { key: 'builder', name: '编程者', letter: '编', en: '实现', color: 'run' },
+  REVIEWER: { key: 'reviewer', name: '检查者', letter: '检', en: '复核', color: 'teal' },
+  PLEASER: { key: 'pleaser', name: '打磨者', letter: '打', en: '收尾', color: 'idle' },
   USER: { key: 'user', name: '你', letter: '你', en: '你', color: 'idle' },
   SYSTEM: { key: 'system', name: '系统', letter: '系', en: '系统', color: 'idle' },
 };
@@ -101,7 +101,7 @@ export const COPY = {
   recentTitle: '项目',
   recentCount: '共 {n} 个',
   allRecords: '全部记录',
-  flow: '阿岚拆解 → 小满定标准 → 阿码制作 → 尺子检查 → 阿润打磨。',
+  flow: '统筹者拆解 → 策划者定标准 → 编程者制作 → 检查者检查 → 打磨者打磨。',
   emptyRecent: '还没有项目。写一句，五个人开始做。',
   emptyReview: '还没有可裁决的成品',
   emptyReviewHint: '到达需要你决定或交付后，卡片会出现在这里。',
