@@ -95,13 +95,13 @@ const PROVIDER_CONFIG_KEY = 'fc-qwen-provider';
 export function qwenProviderConfig() {
   try {
     const raw = JSON.parse(localStorage.getItem(PROVIDER_CONFIG_KEY) || '{}');
-    if (!raw || typeof raw !== 'object') return { provider: 'dashscope', key: '' };
+    if (!raw || typeof raw !== 'object') return { provider: 'groq', key: '' };
     return {
-      provider: ['dashscope', 'modelscope', 'openrouter'].includes(raw.provider) ? raw.provider : 'dashscope',
+      provider: ['groq', 'dashscope', 'modelscope', 'openrouter'].includes(raw.provider) ? raw.provider : 'groq',
       key: typeof raw.key === 'string' ? raw.key : '',
     };
   } catch (e) {
-    return { provider: 'dashscope', key: '' };
+    return { provider: 'groq', key: '' };
   }
 }
 
@@ -117,9 +117,10 @@ export function setQwenProviderConfig(provider, key) {
 }
 
 export const QWEN_PROVIDERS = [
+  { id: 'groq', name: 'Groq', hint: 'gsk_…', model: 'qwen/qwen3.8-27b', url: 'https://console.groq.com/keys' },
+  { id: 'openrouter', name: 'OpenRouter', hint: 'sk-or-v1-…', model: 'qwen/qwen3-coder:free', url: 'https://openrouter.ai/' },
   { id: 'dashscope', name: '阿里云百炼', hint: 'sk-…', model: 'qwen-plus', url: 'https://bailian.console.aliyun.com/' },
   { id: 'modelscope', name: '魔搭 ModelScope', hint: 'ms-…', model: 'Qwen/Qwen3.8-27B', url: 'https://modelscope.cn/' },
-  { id: 'openrouter', name: 'OpenRouter', hint: 'sk-or-v1-…', model: 'qwen/qwen3-coder:free', url: 'https://openrouter.ai/' },
 ];
 
 // ---- 浏览器直连（免密钥额度按访问者 IP 计算）----

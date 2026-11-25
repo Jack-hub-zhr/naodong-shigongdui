@@ -38,13 +38,14 @@ curl localhost:3001/healthz
 | --- | --- |
 | `PORT` | 服务端口，默认 3000 |
 | `OVH_API_KEY` | 可选。OVHcloud AI Endpoints 的 Key；不配也能匿名调用，但匿名额度极小 |
+| `GROQ_API_KEY` | 推荐。Groq 免费层 Key，服务端优先走 `qwen/qwen3.8-27b`（约 30 RPM、1000 次/天） |
 | `DASHSCOPE_API_KEY` | 推荐。阿里云百炼 Key，服务端优先走 `qwen-plus` |
 | `MODELSCOPE_API_KEY` | 可选。魔搭 SDK Token，备用 `Qwen/Qwen3.8-27B` |
 | `OPENROUTER_API_KEY` | 可选。OpenRouter Key，备用 `qwen/qwen3-coder:free` |
 | `DASHSCOPE_BASE_URL` | 可选。覆盖百炼兼容端点，默认北京地域 |
 | `DATA_FILE` | 账号库路径，默认 `data/accounts.json` |
 
-模型按顺序降级：用户自带 Key → 服务端 `DASHSCOPE_API_KEY` / `MODELSCOPE_API_KEY` / `OPENROUTER_API_KEY` → 匿名 `Qwen3.8-27B → Qwen3.6-27B → Qwen3.5-9B → Qwen3.5-397B-A17B → Pollinations openai-fast`。OVH 匿名额度约每个模型/IP/年 2 次；服务端额度用尽后，前端会自动改为浏览器直连，匿名额度按访问者 IP 重新计算。要彻底稳定，至少配置一个百炼 Key；调研见 `docs/qwen-free-api.md`。
+模型按顺序降级：用户自带 Key → 服务端 `GROQ_API_KEY` / `DASHSCOPE_API_KEY` / `MODELSCOPE_API_KEY` / `OPENROUTER_API_KEY` → 匿名 `Qwen3.8-27B → Qwen3.6-27B → Qwen3.5-9B → Qwen3.5-397B-A17B → LLM7 gpt-oss:20b → Pollinations openai-fast`。OVH 匿名额度实测约每个模型/IP/年 1 次；LLM7 匿名约 30 RPM，可作为无 Key 兜底。要彻底稳定，至少配置一个 Groq 或百炼 Key；调研见 `docs/qwen-free-api.md`。
 
 服务端 Key 只在进程内读取；用户自己填的 Key 存在本机 localStorage，请求时临时转发给本站服务端调用上游，不持久化、不随账号云同步、不写进项目。账号密码用 `scrypt` 哈希，登录态是 30 天 Bearer token，数据库只存 token 的 SHA-256。
 

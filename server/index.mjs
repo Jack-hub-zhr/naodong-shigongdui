@@ -182,7 +182,7 @@ function validateCompletionRequest(body) {
   ) {
     throw new ApiError(400, 'HTTP', 'builderFamily 必须是不超过 128 字符的字符串');
   }
-  if (body.provider !== undefined && !['dashscope', 'modelscope', 'openrouter'].includes(body.provider)) {
+  if (body.provider !== undefined && !['groq', 'dashscope', 'modelscope', 'openrouter'].includes(body.provider)) {
     throw new ApiError(400, 'HTTP', 'provider 无效');
   }
   if (

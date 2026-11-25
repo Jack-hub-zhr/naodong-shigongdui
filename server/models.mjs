@@ -1,17 +1,28 @@
 // Upstream model routing for the five services.
 // OVHcloud AI Endpoints works anonymously, but the anonymous quota is tiny
-// (observed ~2 requests / model / IP / year via x-ratelimit-limit-year).
+// (observed ~1 request / model / IP / year via x-ratelimit-limit-year).
 // Set OVH_API_KEY in the environment to use a registered quota instead.
 // Pollinations Classic stays as the last fallback.
+// LLM7.io's anonymous turbo pool is used before Pollinations: no key, ~30 RPM.
 
 const OVH_URL = 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions';
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
+const LLM7_URL = 'https://api.llm7.io/v1/chat/completions';
 const OVH_KEY = (process.env.OVH_API_KEY || '').trim();
 export const OVH_KEYED = Boolean(OVH_KEY);
 const REFERER = 'https://forgecrew-studio.onrender.com';
 
-// 需要 Key 的 Qwen 兼容服务。优先级：用户自带 Key > 服务端环境变量 > 匿名五模型链。
+// 需要 Key 的 Qwen 兼容服务。优先级：用户自带 Key > 服务端环境变量 > 公共匿名链。
 export const KEYED_PROVIDERS = [
+  {
+    id: 'groq',
+    name: 'Groq · Qwen3.8-27B',
+    family: 'Qwen3.8',
+    model: 'qwen/qwen3.8-27b',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    env: 'GROQ_API_KEY',
+    jsonMode: false,
+  },
   {
     id: 'dashscope',
     name: '阿里云百炼 · Qwen Plus',
@@ -111,6 +122,15 @@ export const MODEL_CHAIN = [
     kind: 'ovh',
   },
   {
+    id: 'llm7-gpt-oss-20b',
+    name: 'LLM7 · GPT-OSS 20B',
+    family: 'GPT-OSS',
+    model: 'gpt-oss:20b',
+    url: LLM7_URL,
+    kind: 'openai',
+    apiKey: 'unused',
+  },
+  {
     id: 'pl-openai-fast',
     name: 'Pollinations · openai-fast',
     family: 'GPT-OSS',
@@ -176,7 +196,7 @@ function buildBody(model, input, withJsonMode) {
       temperature: input.temperature,
       max_tokens: input.maxTokens,
       stream: false,
-      ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
+      ...(withJsonMode && model.jsonMode !== false ? { response_format: { type: 'json_object' } } : {}),
     };
   }
 

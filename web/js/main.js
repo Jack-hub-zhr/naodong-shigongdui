@@ -1110,7 +1110,7 @@ function qwenProviderHtml() {
   const current = QWEN_PROVIDERS.find((x) => x.id === cfg.provider) || QWEN_PROVIDERS[0];
   return `<div class="panel provider-panel">
     <h3>Qwen 直连 <span class="chip-mini">可选</span></h3>
-    <div class="desc">公共五模型链在排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
+    <div class="desc">公共模型链在排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
     <div class="provider-form">
       <label class="provider-field">
         <span>服务商</span>
@@ -1130,8 +1130,8 @@ function qwenProviderHtml() {
     </div>
     <div class="provider-state">${cfg.key
       ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
-      : '当前未填 Key，继续使用服务端公共五模型链'}</div>
-    <div class="provider-tip">百炼新账号每个模型通常有独立的免费额度；魔搭需绑定阿里云并实名；OpenRouter 免费模型有每日次数上限。额度以服务商页面为准。</div>
+      : '当前未填 Key，继续使用服务端公共模型链'}</div>
+    <div class="provider-tip">Groq 免费层约 30 次/分钟、1000 次/天；OpenRouter 免费模型有每日次数上限；百炼新账号有 90 天免费额度；魔搭需绑定阿里云并实名。额度以服务商页面为准。</div>
   </div>`;
 }
 
