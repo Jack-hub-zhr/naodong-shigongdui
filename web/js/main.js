@@ -1425,7 +1425,7 @@ document.addEventListener('click', (ev) => {
 
   if (ev.target.closest('#qwen-provider-clear')) {
     setQwenProviderConfig('dashscope', '');
-    toast('已清除本机 Key，回到公共五模型链', 'ok');
+    toast('已清除本机 Key，回到公共模型链', 'ok');
     renderPage();
     return;
   }
