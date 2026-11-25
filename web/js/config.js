@@ -3,7 +3,7 @@
 export const BRAND = {
   name: 'ForgeCrew',
   sub: 'AGENT CREW',
-  version: 'v1.0.1',
+  version: 'v1.1.0',
   slogan: '一句话就够。团队会自己拆解、试错、修正，只在关键分叉停下来问你。',
 };
 

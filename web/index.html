@@ -12,7 +12,8 @@
   // 主题先于渲染，避免闪白
   (function () {
     var user = 'system';
-    try { user = localStorage.getItem('fc-theme-user') || 'dark'; } catch (e) {}
+    try { user = localStorage.getItem('fc-theme-user') || 'system'; } catch (e) {}
+    if (user !== 'system' && user !== 'dark' && user !== 'light') user = 'system';
     var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     var theme = user === 'system' ? system : user;
     if (theme !== 'light' && theme !== 'dark') theme = 'dark';

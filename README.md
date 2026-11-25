@@ -36,16 +36,19 @@ curl localhost:3001/healthz
 
 | 变量 | 说明 |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | 可选，配置后优先使用 |
-| `DEEPSEEK_BASE_URL` | 可选，默认官方地址 |
-| `FREE_BASE_URL` / `FREE_MODEL` | 可选，覆盖默认的团队共用服务 |
 | `PORT` | 服务端口，默认 3000 |
+| `OVH_API_KEY` | 可选。OVHcloud AI Endpoints 的 Key；不配也能匿名调用，但匿名额度极小 |
+| `DATA_FILE` | 账号库路径，默认 `data/accounts.json` |
 
-密钥只在服务端读取，浏览器不保存、不转发。
+模型按顺序降级：`Qwen3.8-27B → Qwen3.6-27B → Qwen3.5-9B → Qwen3.5-397B-A17B → Pollinations openai-fast`。OVH 匿名额度约每个模型/IP/年 2 次；额度用尽会自动冷却并切到下一档。需要稳定额度时配置 `OVH_API_KEY`。
+
+密钥只在服务端读取，浏览器不保存、不转发。账号密码用 `scrypt` 哈希，登录态是 30 天 Bearer token，数据库只存 token 的 SHA-256。
+
+Render 免费实例没有持久磁盘：重新部署或实例重启后，`data/accounts.json` 会回到空库。需要长期保留账号时，挂载持久磁盘并设置 `DATA_FILE` 到该目录，或替换 `server/db.mjs` 为外部数据库。
 
 ## 路由
 
-`/`、`/idea`、`/build`、`/review`、`/profile`
+`/`、`/idea`、`/build`、`/review`、`/profile`、`/我的`
 
 旧路由 `/review` 与中文别名 `/脑洞`、`/施工`、`/验收`、`/我的` 仍可直接打开。
 
