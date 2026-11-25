@@ -42,12 +42,14 @@ export function builderSystem() {
 1. <!DOCTYPE html>、<html lang="zh-CN">、<head>、<meta charset>、<meta name="viewport">、非空 <title>，结尾必须闭合 </html>
 2. 移动端 375px 宽度不横向滚动，触控目标 ≥44px
 3. 至少一个 <button type="button">，为它设置稳定的 id；不要写 onclick 等内联事件
-4. 为 4 条验收标准分别在最相关的元素上加 data-acceptance="A1"…"A4"
+4. 为 4 条完成标准分别在最相关的元素上加 data-acceptance="A1"…"A4"
 5. 不引用外部 JS/CSS/字体/图片；不出现 TODO、lorem ipsum、undefined；空 href 不允许
 6. 文案用中文，视觉完成度要高，不要占位骨架
 7. localStorage、sessionStorage、navigator.clipboard、AudioContext 等可能被沙箱禁止的 API，必须写在 try/catch 里；绝不能让一次异常中断整个脚本
 8. 所有按钮必须真实可用：点击后要有可见状态变化（分数、倒计时、文案、面板切换），不能是空函数
 9. 产物控制在 9KB 以内；先保证完整闭合，再接视觉装饰；接近上限时删装饰，绝不能截断
+10. 任何一轮重做都必须保留上一版的 data-acceptance="A1"…"A4"，不得在改写时丢掉
+11. 设计 token 已由外壳注入：优先用 var(--fc-bg) / var(--fc-ink) / var(--fc-accent) / var(--fc-line)，不要另起一套主色；间距落在 4/8 的倍数，圆角最多 2 种，强调色只用于当前主操作
 
 视觉基线（达不到视为未完成）：
 - 顶部用 CSS 变量定义背景 / 表面 / 描边 / 主文字 / 次文字 / 一个强调色，全站复用
@@ -121,7 +123,7 @@ export function scriptUser(p, html) {
   const spec = p.spec || {};
   return `用户原话：${p.prompt}
 标签：${p.tag}
-验收标准：
+完成标准：
 ${(spec.acceptance || []).map((t, i) => `A${i + 1}. ${t}`).join('\n')}
 页面 HTML（只读，用于找 id）：
 ${String(html).slice(0, 5200)}
@@ -180,7 +182,7 @@ export function builderUser(p, extra = {}) {
 - 目标：${spec.goal}
 - 做：${(spec.inScope || []).join('；') || '（未列，按原话里出现的功能做）'}
 - 不做：${(spec.outOfScope || []).join('；') || '（未列，别加原话没提的功能）'}
-- 验收标准：
+- 完成标准：
 ${(spec.acceptance || []).map((t, i) => `  A${i + 1}. ${t}`).join('\n')}
 
 已做出的裁决：
@@ -189,7 +191,7 @@ ${chosen || '（暂无，先用最稳妥路径）'}
 ${builderLayout(p.tag)}
 
 视觉风格：${styleBrief(p.style)}
-硬约束：首屏必须是一个 hero 区，H1 后紧跟一句 8 字以上的 <p class="lead">；颜色、字体、圆角、阴影只用 var(--fc-*) 或 var(--bg/--surface/--ink/--text/--accent) 变量，不要另定义主色；正文不小于 14px；每屏只放一个主按钮；禁止紫蓝渐变、默认蓝链接、Lorem 与示例文本。
+硬约束：首屏必须是一个 hero 区，H1 后紧跟一句 8 字以上的 <p class="lead">；颜色、字体、圆角、阴影只用 var(--fc-*) 或 var(--bg/--surface/--ink/--text/--accent) 变量，不要另定义主色；底色与文字色必须来自同一套色板，禁止深色页面里出现纯白 hero 或浅字白底；正文不小于 14px；每屏只放一个主按钮；禁止紫蓝渐变、默认蓝链接、Lorem 与示例文本。
 
 第 ${p.round} 轮产物。
 ${p.reworkOrder ? `\n修正要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
@@ -206,7 +208,7 @@ export function delightSystem() {
 
 export function delightUser(p) {
   return `用户原话：${p.prompt}
-验收标准：${(p.spec.acceptance || []).join('；')}
+完成标准：${(p.spec.acceptance || []).join('；')}
 隐性偏好：${p.spec.implicitPreference}
 成品特性：${(p.artifact?.features || []).map((f) => f.text || f).join('；')}
 请输出打磨说明 JSON。`;
@@ -342,20 +344,27 @@ export function normalizeDelight(raw) {
 export function applyBaseStyle(html, styleKey = 'product') {
   if (!html || !html.includes('</head>')) return html;
   const t = STYLE_TOKENS[styleKey] || STYLE_TOKENS.product;
+  // 幂等：旧产物里可能已经带过一次外壳样式，先移除再注入
+  const clean = html.replace(/<style id="fc-base">[\s\S]*?<\/style>/gi, '');
+  // 成品自己已经定义了一套色板时，只补字体与 fc token，绝不覆盖它的底色和文字色，
+  // 否则会出现“深色外壳 + 白底 hero + 浅色标题”这种不可读组合。
+  const ownPalette = /--(?:bg|background|surface|paper)\s*:/i.test(clean)
+    && /--(?:ink|text|fg|foreground)\s*:/i.test(clean);
+  const colorRules = ownPalette ? '' : `
+html body{background:${t.bg}!important;color:${t.ink}!important}`;
+  const aliasVars = ownPalette ? `--font:${t.font};` : `--fc-bg:${t.bg};--fc-surface:${t.surface};--fc-ink:${t.ink};--fc-sub:${t.sub};--fc-accent:${t.accent};--fc-line:${t.line};--fc-radius:${t.radius};--fc-shadow:${t.shadow};--fc-heading:${t.heading};--bg:${t.bg};--background:${t.bg};--surface:${t.surface};--card:${t.surface};--paper:${t.surface};--ink:${t.ink};--text:${t.ink};--fg:${t.ink};--foreground:${t.ink};--sub:${t.sub};--muted:${t.sub};--accent:${t.accent};--primary:${t.accent};--line:${t.line};--border:${t.line};--font:${t.font};--radius:${t.radius};--shadow:${t.shadow};`;
   const base = `<style id="fc-base">
-:root{--fc-bg:${t.bg};--fc-surface:${t.surface};--fc-ink:${t.ink};--fc-sub:${t.sub};--fc-accent:${t.accent};--fc-line:${t.line};--fc-radius:${t.radius};--fc-shadow:${t.shadow};--fc-heading:${t.heading};--bg:${t.bg};--background:${t.bg};--surface:${t.surface};--card:${t.surface};--paper:${t.surface};--ink:${t.ink};--text:${t.ink};--fg:${t.ink};--foreground:${t.ink};--sub:${t.sub};--muted:${t.sub};--accent:${t.accent};--primary:${t.accent};--line:${t.line};--border:${t.line};--font:${t.font};--radius:${t.radius};--shadow:${t.shadow}}
+:root{${aliasVars}}
 html{-webkit-text-size-adjust:100%}
-*{box-sizing:border-box}
-html body{margin:0;font-family:${t.font};line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:var(--fc-bg)!important;color:var(--fc-ink)!important}
+*,*::before,*::after{box-sizing:border-box}
+html body{margin:0;font-family:${t.font};line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}${colorRules}
 h1,h2,h3{font-family:${t.font};letter-spacing:-.02em}
 img,svg,video{max-width:100%}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-html body{min-height:100dvh}
-body>:is(main,#game,#app,.app,.stage,.page,.shell){min-height:calc(100dvh - 40px)}
 ::selection{background:${t.accent}33}
 </style>`;
-  return html.replace('</head>', base + '</head>');
+  return clean.replace('</head>', base + '</head>');
 }
 
 // review checks
@@ -383,8 +392,8 @@ export function inspect(html, spec) {
     const re = new RegExp(`data-acceptance\\s*=\\s*["']?a${i}\\b`, 'i');
     if (!re.test(src)) missing.push(`A${i}`);
   }
-  push('A3', '验收落点', missing.length === 0,
-    missing.length === 0 ? `${total} 条验收标准都有 data-acceptance 落点` : `缺少 ${missing.join('、')} 落点（期望 data-acceptance="A1"…）`);
+  push('A3', '完成标准落点', missing.length === 0,
+    missing.length === 0 ? `${total} 条完成标准都有对应的页面元素` : `有 ${missing.length} 条完成标准没有落到页面上`);
 
   const buttons = (src.match(/<button\b/gi) || []).length;
   const hasListener = /addeventlistener/i.test(src) || /\son[a-z]+\s*=\s*["']/i.test(src);
@@ -449,6 +458,20 @@ export function failedIds(report) {
 }
 
 // runtime helpers
+function addHandoff(p, from, to, deliverable, note) {
+  if (!p) return;
+  p.handoffs = Array.isArray(p.handoffs) ? p.handoffs : [];
+  p.handoffs.push({
+    from,
+    to,
+    deliverable: String(deliverable || '').slice(0, 60),
+    note: String(note || '').slice(0, 90),
+    round: p.round || 0,
+    ts: Date.now(),
+  });
+  p.handoffs = p.handoffs.slice(-40);
+}
+
 function startAgent(p, key, base) {
   p.agentRuntime = p.agentRuntime || {};
   const rt = (p.agentRuntime[key] = p.agentRuntime[key] || {});
@@ -565,8 +588,10 @@ export async function advance(p, deps) {
         p.decisions = p.spec.decisions;
         stopAgent(p, 'product', 100);
         stopAgent(p, 'orch', 62);
-        deps.log('PRODUCT', `已拆解为 ${p.spec.acceptance.length} 条验收标准`, 'pass');
+        deps.log('PRODUCT', `已拆解为 ${p.spec.acceptance.length} 条完成标准`, 'pass');
         deps.log('PRODUCT', `预埋 ${p.decisions.length} 个需要你决定，关键分叉交给你拍板`, 'wait');
+        addHandoff(p, 'ORCHESTRATOR', 'PRODUCT', `拆解单 · ${p.spec.acceptance.length} 条完成标准`, p.spec.summary || '');
+        addHandoff(p, 'PRODUCT', 'BUILDER', `规格卡 · ${p.spec.acceptance.length} 条检查项`, `场景 ${p.spec.inScope.length} 个 / 不做 ${p.spec.outOfScope.length} 条`);
         p.round = 1;
         p.phase = 'build';
         p.status = 'BUILDING';
@@ -628,6 +653,7 @@ export async function advance(p, deps) {
           bytes: html.length,
         };
         p.versions = [...(p.versions || []), { round: p.round, revision: p.revision || 1, html, createdAt: Date.now() }].slice(-6);
+        addHandoff(p, 'BUILDER', 'REVIEWER', `第 ${p.round} 轮版本 · ${(html.length / 1024).toFixed(1)} KB`, '已自测，交给你逐条检查');
         p.phase = 'review';
         p.status = 'REVIEWING';
         p.stage = stageOf('REVIEWING');
@@ -660,6 +686,8 @@ export async function advance(p, deps) {
             p.stage = stageOf('AWAITING_USER');
             p.awaitReason = 'decision';
             stopAgent(p, 'orch', 70);
+            addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `通过版 · ${report.findings.length} 项检查全过`, '等统筹者整理成给你确认的方案');
+            addHandoff(p, 'ORCHESTRATOR', 'USER', `选择卡 · ${p.decisions.length} 个方案`, '两个都能用，差别写在方案里');
             deps.log('ORCHESTRATOR', '产物已通过自检，需要你决定等你拍板', 'wait');
             p.updatedAt = Date.now();
             deps.save();
@@ -673,6 +701,7 @@ export async function advance(p, deps) {
         p.failedHistory = [...(p.failedHistory || []), sig];
         p.failedSignature = sig;
         p.failedIds = failed;
+        addHandoff(p, 'REVIEWER', 'BUILDER', `驳回单 · ${failed.length} 项未过`, (report.findings.find((f) => !f.passed)?.detail || '').slice(0, 70));
         const repeated = p.failedHistory.filter((s) => s === sig).length >= 2;
         if (repeated || p.round >= p.maxRound) {
           p.escalate = true;
@@ -681,6 +710,8 @@ export async function advance(p, deps) {
           p.stage = stageOf('AWAITING_USER');
           p.awaitReason = 'escalate';
           stopAgent(p, 'orch', 70);
+          addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `诊断单 · ${failed.length} 项未过`, repeated ? '连续两轮同一问题，需要你定方向' : '到轮次上限，需要你定方向');
+          addHandoff(p, 'ORCHESTRATOR', 'USER', '诊断卡 · 需要你定方向', '继续修，或先拿到当前这一版');
           deps.log('ORCHESTRATOR', repeated
             ? '同一个问题连续 2 轮没修好，需要你定方向'
             : `第 ${p.round} 轮仍未通过，已到第 ${p.maxRound} 轮上限，转人工`, 'wait');
@@ -718,7 +749,8 @@ export async function advance(p, deps) {
         p.roundStartedAt = Date.now();
         startAgent(p, 'builder', 8);
         startAgent(p, 'orch', 40);
-        deps.log('ORCHESTRATOR', `已写入裁决，第 ${p.round} 轮按你的选择重做`);
+        addHandoff(p, 'USER', 'BUILDER', '已拍板的方案', p.reworkOrder.slice(0, 80));
+        deps.log('ORCHESTRATOR', `已写入选择，第 ${p.round} 轮按你的选择重做`);
         p.updatedAt = Date.now();
         deps.save();
         break;
@@ -735,7 +767,9 @@ export async function advance(p, deps) {
         stopAgent(p, 'builder', 100);
         stopAgent(p, 'reviewer', 100);
         startAgent(p, 'pleaser', 10);
-        deps.log('ORCHESTRATOR', `第 ${p.round} 轮成品已交付，等你验收`);
+        addHandoff(p, 'REVIEWER', 'PLEASER', `通过版 · 第 ${p.round} 轮`, '功能过了，交给你收字、收色、收动效');
+        addHandoff(p, 'PLEASER', 'USER', `成品 · ${((p.artifact?.html.length || 0) / 1024).toFixed(1)} KB`, '可以打开、导出、分享，也可以再做一版');
+        deps.log('ORCHESTRATOR', `第 ${p.round} 轮成品已交付，等你确认`);
         p.updatedAt = Date.now();
         deps.save();
         break;

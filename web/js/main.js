@@ -463,7 +463,7 @@ function ideaHtml() {
         <div class="team-row"><b>统筹者</b><span>拆成 4 个场景，定 3 轮上限</span></div>
         <div class="team-row"><b>策划者</b><span>写下什么算完成</span></div>
         <div class="team-row"><b>编程者</b><span>先跑一遍再交出去</span></div>
-        <div class="team-row"><b>检查者</b><span>只认断言，不认感觉</span></div>
+        <div class="team-row"><b>检查者</b><span>只认检查结果，不靠感觉</span></div>
         <div class="team-row"><b>打磨者</b><span>收字、收色、收动效</span></div>
       </div>
     </aside>
@@ -613,7 +613,7 @@ function humanStatus(p) {
     const pass = p.report?.passed;
     return `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
   }
-  if (p.status === 'REVIEWING') return `检查者在检查第 ${p.round} 轮：只看断言，不认感觉 · 约 30 秒出结果。`;
+  if (p.status === 'REVIEWING') return `检查者在检查第 ${p.round} 轮：逐条看检查结果，不靠感觉 · 约 30 秒出结果。`;
   if (p.status === 'REWORKING') {
     const why = (p.failedIds || []).slice(0, 2).map((id) => {
       const f = (p.report?.findings || []).find((x) => x.id === id);
@@ -622,17 +622,17 @@ function humanStatus(p) {
     return `第 ${p.round} 轮修正：编程者在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
   }
   if (p.status === 'BUILDING') return `编程者在第 ${p.round || 1} 轮制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
-  return '统筹者在拆这句话：先定 3 轮上限，再交给策划者写验收标准 · 约 20 秒。';
+  return '统筹者在拆这句话：先定 3 轮上限，再交给策划者写完成标准 · 约 20 秒。';
 }
 
 function stageDetailHtml(p) {
   if (!p || p.status === 'DELIVERED' || p.status === 'AWAITING_USER') return '';
   const idx = stageOf(p.status);
   const defs = [
-    { no: '01', title: '理解', owner: '统筹者 → 策划者', text: '把一句话拆成 4 个场景，定 3 轮上限；策划者写下 4 条能检查的验收标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
+    { no: '01', title: '理解', owner: '统筹者 → 策划者', text: '把一句话拆成 4 个场景，定 3 轮上限；策划者写下 4 条能检查的完成标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
     { no: '02', title: '制作', owner: '编程者', text: '按四段结构和风格 token 写 HTML/CSS，先自己跑一遍，再把脚本补上。', items: ['色、字、距、角、影全部来自 tokens', '先交付可打开的页面，再补交互'] },
-    { no: '03', title: '检查', owner: '检查者', text: '12 项断言逐条过：结构、交互、首屏主张、对比度、三档宽度。', items: ['不过就回到第 N 轮修正，不拿感觉当结论', '只把需要你决定的点留给你'] },
-    { no: '04', title: '交付', owner: '打磨者 → 你', text: '收字、收色、收动效，附上做了什么与没做什么；成品随时能带走。', items: ['打开 / 分享 / 再做一版 / 导出', '10 分钟内可撤回验收'] },
+    { no: '03', title: '检查', owner: '检查者', text: '12 项检查逐条过：结构、交互、首屏主张、内容真实、三档不横滚。', items: ['不过就回到第 N 轮修正，不拿感觉当结论', '只把需要你决定的点留给你'] },
+    { no: '04', title: '交付', owner: '打磨者 → 你', text: '收字、收色、收动效，附上做了什么与没做什么；成品随时能带走。', items: ['打开 / 分享 / 再做一版 / 导出', '10 分钟内可撤回确认'] },
   ];
   return `<section class="stage-detail">
     ${defs.map((d, i) => `<div class="stage-line ${i === idx ? 'current' : ''}">
@@ -640,6 +640,28 @@ function stageDetailHtml(p) {
       <div class="body"><div class="head"><b>${d.title}</b><span>${d.owner}</span>${i === idx ? '<em class="now">现在</em>' : ''}</div>
       ${i === idx ? `<p>${d.text}</p><ul>${d.items.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</div>
     </div>`).join('')}
+  </section>`;
+}
+
+function handoffsHtml(p) {
+  const list = (p?.handoffs || []).slice(-6).reverse();
+  if (!list.length) return '';
+  return `<section class="section handoff-section">
+    <div class="section-head">
+      <h2>团队交接</h2>
+      <span class="meta">谁把什么交给谁 · 最新在上 · 最近 ${list.length} 次</span>
+    </div>
+    <div class="handoff-list">
+      ${list.map((h) => {
+        const from = ROLES[h.from] || ROLES.SYSTEM;
+        const to = ROLES[h.to] || ROLES.SYSTEM;
+        return `<div class="handoff-row">
+          <div class="handoff-route"><b>${esc(from.name)}</b><span class="handoff-arrow">→</span><b>${esc(to.name)}</b></div>
+          <div class="handoff-main"><b>${esc(h.deliverable)}</b>${h.note ? `<span>${esc(h.note)}</span>` : ''}</div>
+          ${h.round ? `<span class="handoff-round">第 ${h.round} 轮</span>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
   </section>`;
 }
 
@@ -664,7 +686,7 @@ function deliverActions(p) {
     <button class="btn" id="export-artifact" type="button">导出</button>
     <button class="btn" id="share-artifact" type="button">分享</button>
     <button class="btn" id="another-version" type="button">再做一版</button>
-    ${canUndo ? '<button class="btn ghost" id="undo-delivery" type="button">撤回验收</button>' : ''}
+    ${canUndo ? '<button class="btn ghost" id="undo-delivery" type="button">撤回确认</button>' : ''}
   </div>`;
 }
 
@@ -794,6 +816,7 @@ function buildHtml() {
   </div>
   ${pauseBanner(p)}
   ${stepperHtml(p)}
+  ${handoffsHtml(p)}
   ${stageDetailHtml(p)}
   ${awaiting ? `<section class="section act-section">
     <div class="act-label">需要你确认</div>
@@ -838,7 +861,7 @@ function decisionCard(p) {
   };
   return `<div class="decision-card">
     <div class="decision-head">
-      <span class="no">决策点 ${d.index || index} / ${total}</span>
+      <span class="no">第 ${d.index || index} 个选择 / ${total}</span>
       <h3>${d.topic ? `${esc(d.topic)}：` : ''}${esc(d.title || '待定')}</h3>
       <span class="act">${d.chosen ? pill('已拍板 · ' + d.chosen, 'ok') : pill('等你拍板', 'wait', 'data-breath="1"')}</span>
     </div>
@@ -846,11 +869,11 @@ function decisionCard(p) {
       <div class="quote"><span class="q">“</span>${esc(p.prompt)}<span class="q close">”</span></div>
     </div>
     <div class="decision-sub">${esc(tagLabel(p.tag))} · 第 ${p.round} 轮 · 团队建议在下面两个方案里二选一${d.context ? ` · ${esc(d.context)}` : ''}</div>
-    <div class="options" role="group" aria-label="裁决选项">
+    <div class="options" role="group" aria-label="方案选项">
       ${opt(d.optionA, 0)}${opt(d.optionB, 1)}
     </div>
     <div class="decision-foot">
-      <span>${allChosen ? '两个需要你决定都已拍板，可以继续制作' : COPY.decisionFoot}</span>
+      <span>${allChosen ? '两个选择都已拍板，可以继续制作' : COPY.decisionFoot}</span>
       <span class="spacer"></span>
       <button class="btn" id="reject-plan" type="button">${COPY.reject}</button>
       <button class="btn primary" id="apply-plan" type="button" ${allChosen ? '' : 'disabled'}>${COPY.accept}</button>
@@ -892,7 +915,7 @@ function previewCard(p, opts = {}) {
       <span class="meta" style="font-size:10.5px;color:var(--text-3)">第 ${a.round} 轮 · ${formatDateTime(a.createdAt)} · ${(a.html.length / 1024).toFixed(1)} KB</span>
       <span class="act">${compact ? `<button class="btn small" id="open-artifact" type="button">打开</button>` : ''}</span>
     </div>
-    ${versions.length > 1 ? `<div class="version-row"><span>历史版本</span>${versions.map((v) => `<button class="version-chip" data-version="${v.createdAt}" type="button">第 ${v.round} 轮${(v.revision || 1) > 1 ? ` · 第 ${v.revision} 版` : ''}${v.createdAt === a.createdAt ? ' · 当前' : ''}</button>`).join('')}</div>` : ''}
+    ${versions.length > 1 ? `<div class="version-row"><span>历史版本</span>${versions.map((v) => `<span class="version-item"><button class="version-chip" data-version="${v.createdAt}" type="button">第 ${v.round} 轮${(v.revision || 1) > 1 ? ` · 第 ${v.revision} 版` : ''}${v.createdAt === a.createdAt ? ' · 当前' : ''}</button>${v.createdAt === a.createdAt ? '' : `<button class="version-restore" data-restore-version="${v.createdAt}" type="button">回到这版</button>`}</span>`).join('')}</div>` : ''}
     <div class="preview-body">
       <div class="preview-frame-wrap">
         <div class="browser-chrome"><span></span><span></span><span></span><span class="url">forgecrew.app/p/${esc(p.id.slice(-6))} · round ${a.round}</span></div>
@@ -1004,8 +1027,8 @@ function profileHtml() {
             <div class="side"><button class="switch" data-toggle-follow type="button" aria-checked="${state.autofollow}" aria-label="自动跟随"></button></div>
           </div>
           <div class="setting-row">
-            <div class="txt"><b>验收通知</b><span>到达需要你决定或交付时提醒你</span></div>
-            <div class="side"><button class="switch" id="notify-toggle" type="button" aria-checked="false" aria-label="验收通知"></button></div>
+            <div class="txt"><b>确认通知</b><span>到达需要你决定或交付时提醒你</span></div>
+            <div class="side"><button class="switch" id="notify-toggle" type="button" aria-checked="false" aria-label="确认通知"></button></div>
           </div>
         </div>
       </div>
@@ -1220,6 +1243,35 @@ document.addEventListener('click', (ev) => {
     return;
   }
 
+  const restoreBtn = ev.target.closest('[data-restore-version]');
+  if (restoreBtn) {
+    const p = state.project;
+    const v = (p?.versions || []).find((x) => String(x.createdAt) === restoreBtn.dataset.restoreVersion);
+    if (!p || !v?.html) return;
+    if (!window.confirm(`回到第 ${v.round} 轮这一版？当前版本仍保留在历史里。`)) return;
+    p.artifact = {
+      ...(p.artifact || {}),
+      round: v.round,
+      html: v.html,
+      createdAt: v.createdAt,
+      bytes: v.html.length,
+      title: p.title,
+      features: (p.spec?.acceptance || []).slice(0, 4),
+    };
+    p.status = 'DELIVERED';
+    p.phase = 'done';
+    p.autoRun = false;
+    p.round = v.round;
+    p.deliveredAt = p.deliveredAt || Date.now();
+    p.restoredAt = Date.now();
+    addLog(p, 'USER', `回到第 ${v.round} 轮这一版`, 'wait');
+    saveNow();
+    renderPage();
+    hydrate();
+    toast(`已回到第 ${v.round} 轮这一版`);
+    return;
+  }
+
   const themeSet = ev.target.closest('[data-theme-set]');
   if (themeSet) {
     setThemeUser(themeSet.dataset.themeSet);
@@ -1286,7 +1338,7 @@ document.addEventListener('click', (ev) => {
   if (ev.target.closest('#clear-cancel')) { const w = document.getElementById('clear-confirm-wrap'); if (w) w.innerHTML = ''; return; }
   if (ev.target.closest('#clear-run')) { clearAll(); return; }
   if (ev.target.closest('#notify-toggle')) {
-    toast('验收通知需要在浏览器里允许通知权限后才生效');
+    toast('确认通知需要在浏览器里允许通知权限后才生效');
     return;
   }
   if (ev.target.closest('#close-sheet')) { closeCrewSheet(); return; }
@@ -1425,7 +1477,7 @@ function applyPlan() {
   if (!all) { toast('两个需要你决定都要选一个方案', 'err'); return; }
   p.phase = 'apply';
   p.decisionsApplied = true;
-  addLog(p, 'USER', '两个需要你决定已拍板，团队按所选方案继续', 'wait');
+  addLog(p, 'USER', '两个选择已拍板，团队按所选方案继续', 'wait');
   saveNow();
   setRoute('build');
   renderAll();
@@ -1438,7 +1490,7 @@ function rejectPlan() {
   p.decisionsApplied = true;
   p.revision = (p.revision || 1) + 1;
   p.maxRound = 3;
-  p.reworkOrder = '用户要求再试一版：换一种更贴近原话的表达，保留全部验收标准';
+  p.reworkOrder = '用户要求再试一版：换一种更贴近原话的表达，保留全部完成标准';
   p.phase = 'build';
   p.status = 'REWORKING';
   p.stage = stageOf('REWORKING');
@@ -1562,7 +1614,7 @@ function undoDelivery() {
   p.decisionsApplied = false;
   p.deliveredAt = null;
   (p.decisions || []).forEach((d) => { d.chosen = null; });
-  addLog(p, 'USER', '撤回验收，回到确认步骤', 'wait');
+  addLog(p, 'USER', '撤回确认，回到确认步骤', 'wait');
   saveNow();
   renderAll();
   toast('已撤回，可以重新选择');
@@ -1713,7 +1765,7 @@ function paletteItems() {
   const base = [
     { label: '想法 · 把你的想法交给团队', hint: '#/idea', route: 'idea' },
     { label: '制作 · 实时进度与过程记录', hint: '#/build', route: 'build' },
-    { label: '验收 · 需要你决定与成品', hint: '#/review', route: 'review' },
+    { label: '确认 · 需要你决定与成品', hint: '#/review', route: 'review' },
     { label: '我的 · 外观、服务连接与历史', hint: '#/profile', route: 'profile' },
     { label: '切换主题（暗 / 亮）', hint: 'theme', action: 'theme' },
   ];
