@@ -1191,3 +1191,98 @@ input, textarea { font: inherit; color: inherit; }
   .task-controls .btn.small { height: 34px; }
   .task-del-x { width: 30px; height: 30px; }
 }
+
+/* ---------------- 本机 Qwen 连接 ---------------- */
+.provider-panel { margin-top: 14px; }
+.provider-panel h3 { display: flex; align-items: center; gap: 8px; }
+.provider-form { display: grid; gap: 10px; margin-top: 12px; }
+.provider-field { display: grid; gap: 5px; }
+.provider-field span { font-size: 10.5px; letter-spacing: 0.04em; color: var(--text-3); }
+.provider-field select,
+.provider-field input {
+  width: 100%; height: 38px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--line-strong); background: var(--surface-2);
+  color: var(--text); font-size: 12.5px; outline: none;
+}
+.provider-field input:focus,
+.provider-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.provider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.provider-help { margin-left: auto; font-size: 11px; color: var(--accent-text); text-decoration: none; border-bottom: 1px solid rgba(240, 194, 75, 0.35); }
+.provider-state { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
+.provider-tip { margin-top: 6px; font-size: 10px; color: var(--text-3); line-height: 1.6; }
+
+/* ---------------- 聊天真实回复状态 ---------------- */
+.chat-tag {
+  display: inline-block; margin-top: 5px; padding: 1px 6px; border-radius: 20px;
+  font-size: 9.5px; letter-spacing: 0.03em; color: var(--accent-text);
+  background: var(--accent-soft); border: 1px solid rgba(240, 194, 75, 0.2);
+}
+.chat-rebuild { margin-top: 7px; height: 27px; padding: 0 10px; font-size: 11px; }
+.chat-typing .chat-bubble p { color: var(--text-2); }
+.typing-dots { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: 2px; }
+.typing-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); animation: fc-blink 1s infinite; }
+.typing-dots i:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes fc-blink { 0%, 70%, 100% { opacity: 0.25; } 35% { opacity: 1; } }
+
+/* ---------------- 使用说明弹层 ---------------- */
+.guide-btn { font-family: var(--font-sans, sans-serif); font-size: 13px; font-weight: 600; }
+.guide-scrim {
+  position: fixed; inset: 0; z-index: 300; background: rgba(5, 5, 7, 0.62);
+  backdrop-filter: blur(6px); opacity: 0; transition: opacity 0.18s ease;
+}
+.guide-scrim.open { opacity: 1; }
+.guide-scrim.closing { opacity: 0; }
+.guide-modal {
+  position: fixed; z-index: 301; left: 50%; top: 50%; transform: translate(-50%, -46%);
+  width: min(800px, calc(100vw - 36px)); max-height: min(84vh, 900px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: 18px;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.42);
+  opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.guide-modal.open { opacity: 1; transform: translate(-50%, -50%); }
+.guide-modal.closing { opacity: 0; transform: translate(-50%, -48%); }
+.guide-head { display: flex; gap: 18px; padding: 22px 24px 16px; border-bottom: 1px solid var(--line); }
+.guide-head > div { min-width: 0; flex: 1; }
+.guide-head h2 { margin: 6px 0 6px; font-size: 22px; line-height: 1.3; letter-spacing: -0.01em; }
+.guide-head p { margin: 0; font-size: 11.5px; line-height: 1.65; color: var(--text-3); }
+.guide-head b { color: var(--text-2); }
+.guide-close {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--line-strong); background: var(--surface-2);
+  color: var(--text-2); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.guide-close:hover { color: var(--text); border-color: var(--text-3); }
+.guide-body { overflow-y: auto; padding: 8px 24px 20px; overscroll-behavior: contain; }
+.guide-step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.guide-step:last-child { border-bottom: 0; }
+.guide-no { font-size: 11px; color: var(--accent-text); letter-spacing: 0.08em; padding-top: 3px; }
+.guide-step h3 { margin: 0 0 6px; font-size: 14.5px; letter-spacing: -0.005em; }
+.guide-step p { margin: 0; font-size: 12px; line-height: 1.75; color: var(--text-2); }
+.guide-step figure { margin: 12px 0 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.guide-step img { display: block; width: 100%; height: auto; }
+.guide-step figcaption { padding: 7px 10px; font-size: 10px; color: var(--text-3); border-top: 1px solid var(--line); }
+.guide-foot { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--surface); }
+.guide-foot > span { font-size: 10.5px; color: var(--text-3); line-height: 1.5; }
+.guide-actions { margin-left: auto; display: flex; gap: 8px; flex: 0 0 auto; }
+.guide-actions .btn { height: 34px; padding: 0 15px; }
+body.guide-open { overflow: hidden; }
+@media (max-width: 760px) {
+  .guide-modal { width: 100vw; max-height: 92vh; top: auto; bottom: 0; left: 0; transform: translateY(12px); border-radius: 18px 18px 0 0; border-bottom: 0; margin-bottom: env(safe-area-inset-bottom); }
+  .guide-modal.open { transform: translateY(0); }
+  .guide-modal.closing { transform: translateY(10px); }
+  .guide-head { padding: 18px 18px 14px; }
+  .guide-head h2 { font-size: 19px; }
+  .guide-body { padding: 4px 18px 16px; }
+  .guide-step { grid-template-columns: 26px 1fr; gap: 8px; padding: 16px 0; }
+  .guide-step p { font-size: 12.5px; }
+  .guide-foot { padding: 12px 16px; flex-wrap: wrap; }
+  .guide-foot > span { flex: 1 1 100%; }
+  .guide-actions { width: 100%; margin-left: 0; }
+  .guide-actions .btn { flex: 1; height: 40px; }
+  .guide-actions .btn.primary { flex: 1.4; }
+}
+.guide-step figure a { display: block; line-height: 0; }
+.guide-step figure a:hover img { opacity: 0.94; }

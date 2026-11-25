@@ -8,6 +8,71 @@ const OVH_URL = 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completio
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 const OVH_KEY = (process.env.OVH_API_KEY || '').trim();
 export const OVH_KEYED = Boolean(OVH_KEY);
+const REFERER = 'https://forgecrew-studio.onrender.com';
+
+// 需要 Key 的 Qwen 兼容服务。优先级：用户自带 Key > 服务端环境变量 > 匿名五模型链。
+export const KEYED_PROVIDERS = [
+  {
+    id: 'dashscope',
+    name: '阿里云百炼 · Qwen Plus',
+    family: 'Qwen3',
+    model: 'qwen-plus',
+    url: process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    env: 'DASHSCOPE_API_KEY',
+  },
+  {
+    id: 'modelscope',
+    name: '魔搭 · Qwen3.8-27B',
+    family: 'Qwen3.8',
+    model: 'Qwen/Qwen3.8-27B',
+    url: 'https://api-inference.modelscope.cn/v1/chat/completions',
+    env: 'MODELSCOPE_API_KEY',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter · Qwen3 Coder Free',
+    family: 'Qwen3',
+    model: 'qwen/qwen3-coder:free',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    env: 'OPENROUTER_API_KEY',
+  },
+];
+
+function providerById(id) {
+  return KEYED_PROVIDERS.find((p) => p.id === id) || null;
+}
+
+function keyedModel(provider, apiKey, prefix) {
+  return {
+    id: `${prefix}-${provider.id}`,
+    name: provider.name,
+    family: provider.family,
+    model: provider.model,
+    url: provider.url,
+    kind: 'openai',
+    apiKey,
+    providerId: provider.id,
+    keyed: true,
+  };
+}
+
+export function customModel(providerId, apiKey) {
+  const provider = providerById(String(providerId || '').trim());
+  const key = String(apiKey || '').trim();
+  if (!provider || key.length < 8 || key.length > 300) return null;
+  return keyedModel(provider, key, 'user');
+}
+
+function envModels() {
+  return KEYED_PROVIDERS
+    .map((p) => {
+      const key = String(process.env[p.env] || '').trim();
+      return key ? keyedModel(p, key, 'env') : null;
+    })
+    .filter(Boolean);
+}
+
+export const KEYED_CONFIGURED = KEYED_PROVIDERS.some((p) => Boolean(String(process.env[p.env] || '').trim()));
 const UPSTREAM_TIMEOUT_MS = 65_000;
 const RATE_COOLDOWN_MS = 65_000;
 const ERROR_COOLDOWN_MS = 20_000;
@@ -68,17 +133,29 @@ function cool(model, ms) {
 
 export function modelsStatus() {
   const now = Date.now();
-  return MODEL_CHAIN.map((m) => ({
+  const keyed = envModels().map((m) => ({
     id: m.id,
     name: m.name,
     family: m.family,
     model: m.model,
+    keyed: true,
     available: cooldownLeft(m, now) === 0,
     cooldownSec: Math.ceil(cooldownLeft(m, now) / 1000),
   }));
+  return [...keyed, ...MODEL_CHAIN.map((m) => ({
+    id: m.id,
+    name: m.name,
+    family: m.family,
+    model: m.model,
+    keyed: false,
+    available: cooldownLeft(m, now) === 0,
+    cooldownSec: Math.ceil(cooldownLeft(m, now) / 1000),
+  }))];
 }
 
 export function primaryModel() {
+  const keyed = envModels().find((m) => cooldownLeft(m) === 0);
+  if (keyed) return keyed;
   const ready = MODEL_CHAIN.find((m) => cooldownLeft(m) === 0) || MODEL_CHAIN[MODEL_CHAIN.length - 1];
   return ready;
 }
@@ -89,6 +166,20 @@ function pickModels() {
 }
 
 function buildBody(model, input, withJsonMode) {
+  if (model.kind === 'openai') {
+    return {
+      model: model.model,
+      messages: [
+        { role: 'system', content: input.system },
+        { role: 'user', content: input.user },
+      ],
+      temperature: input.temperature,
+      max_tokens: input.maxTokens,
+      stream: false,
+      ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
+    };
+  }
+
   if (model.kind === 'ovh') {
     return {
       model: model.model,
@@ -128,7 +219,10 @@ async function request(model, input, withJsonMode = Boolean(input.json)) {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        ...(model.kind === 'ovh' && OVH_KEY ? { Authorization: `Bearer ${OVH_KEY}` } : {}),
+        ...(model.apiKey
+          ? { Authorization: `Bearer ${model.apiKey}` }
+          : (model.kind === 'ovh' && OVH_KEY ? { Authorization: `Bearer ${OVH_KEY}` } : {})),
+        ...(model.providerId === 'openrouter' ? { 'HTTP-Referer': REFERER, 'X-Title': 'ForgeCrew' } : {}),
       },
       body: JSON.stringify(buildBody(model, input, withJsonMode)),
       redirect: 'error',
@@ -169,7 +263,8 @@ async function request(model, input, withJsonMode = Boolean(input.json)) {
 }
 
 export async function complete(input) {
-  const models = pickModels();
+  const custom = customModel(input.provider, input.providerKey);
+  const models = [custom, ...envModels(), ...pickModels()].filter((m) => m && cooldownLeft(m) === 0);
   let sawRateLimit = false;
   let lastMessage = '';
 
@@ -184,10 +279,11 @@ export async function complete(input) {
         if (result.text && result.finish !== 'length') {
           return {
             text: result.text,
-            provider: OVH_KEYED && model.kind === 'ovh' ? 'keyed' : 'keyless',
+            provider: (model.keyed || (OVH_KEYED && model.kind === 'ovh')) ? 'keyed' : 'keyless',
             providerName: model.name,
             family: model.family,
             model: model.id,
+            providerId: model.providerId || model.kind,
           };
         }
 
@@ -225,7 +321,7 @@ export async function complete(input) {
 
       if (result.status === 401 || result.status === 403) {
         cool(model, 10 * 60_000);
-        lastMessage = `${model.name} 拒绝匿名访问`;
+        lastMessage = model.keyed ? `${model.name} 的 Key 无效或已过期` : `${model.name} 拒绝匿名访问`;
         break;
       }
 

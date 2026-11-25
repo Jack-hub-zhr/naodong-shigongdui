@@ -194,6 +194,7 @@ ${builderLayout(p.tag)}
 硬约束：首屏必须是一个 hero 区，H1 后紧跟一句 8 字以上的 <p class="lead">；颜色、字体、圆角、阴影只用 var(--fc-*) 或 var(--bg/--surface/--ink/--text/--accent) 变量，不要另定义主色；底色与文字色必须来自同一套色板，禁止深色页面里出现纯白 hero 或浅字白底；正文不小于 14px；每屏只放一个主按钮；禁止紫蓝渐变、默认蓝链接、Lorem 与示例文本。
 
 第 ${p.round} 轮产物。
+${(p.extraRequirements || []).length ? `\n用户在团队聊天里追加的要求（必须一起满足，不能牺牲已有功能）：\n${p.extraRequirements.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n` : ''}
 ${p.reworkOrder ? `\n修正要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
 ${extra.previous ? `\n上一轮产物（可参考，不要照抄）：\n${String(extra.previous).slice(0, 4200)}\n` : ''}
 请直接输出完整 HTML。`;

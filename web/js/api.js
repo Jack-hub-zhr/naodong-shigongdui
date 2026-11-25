@@ -28,6 +28,7 @@ function timeoutSignal(ms) {
 async function completeViaServer(req) {
   const url = API.endpoint('/api/complete');
   const maxTokens = Math.min(8192, req.maxTokens || (req.role === 'BUILDER' ? 7000 : 1500));
+  const keyConfig = qwenProviderConfig();
   let lastMessage = '服务端不可用';
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -44,6 +45,7 @@ async function completeViaServer(req) {
           json: Boolean(req.json),
           temperature: req.temperature ?? (req.role === 'BUILDER' ? 0.7 : 0.4),
           maxTokens,
+          ...(keyConfig.key ? { provider: keyConfig.provider, providerKey: keyConfig.key } : {}),
         }),
         signal,
       });
@@ -84,6 +86,41 @@ async function completeViaServer(req) {
 
   throw new ApiError('NETWORK', lastMessage);
 }
+
+
+// ---------- 可选：用户自己的 Qwen API Key ----------
+// 只保存在这台浏览器的 localStorage，不进入账号云同步，也不会被服务端持久化。
+const PROVIDER_CONFIG_KEY = 'fc-qwen-provider';
+
+export function qwenProviderConfig() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROVIDER_CONFIG_KEY) || '{}');
+    if (!raw || typeof raw !== 'object') return { provider: 'dashscope', key: '' };
+    return {
+      provider: ['dashscope', 'modelscope', 'openrouter'].includes(raw.provider) ? raw.provider : 'dashscope',
+      key: typeof raw.key === 'string' ? raw.key : '',
+    };
+  } catch (e) {
+    return { provider: 'dashscope', key: '' };
+  }
+}
+
+export function setQwenProviderConfig(provider, key) {
+  try {
+    const clean = String(key || '').trim().slice(0, 300);
+    if (!clean) localStorage.removeItem(PROVIDER_CONFIG_KEY);
+    else localStorage.setItem(PROVIDER_CONFIG_KEY, JSON.stringify({ provider, key: clean }));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export const QWEN_PROVIDERS = [
+  { id: 'dashscope', name: '阿里云百炼', hint: 'sk-…', model: 'qwen-plus', url: 'https://bailian.console.aliyun.com/' },
+  { id: 'modelscope', name: '魔搭 ModelScope', hint: 'ms-…', model: 'Qwen/Qwen3.8-27B', url: 'https://modelscope.cn/' },
+  { id: 'openrouter', name: 'OpenRouter', hint: 'sk-or-v1-…', model: 'qwen/qwen3-coder:free', url: 'https://openrouter.ai/' },
+];
 
 // ---- 浏览器直连（免密钥额度按访问者 IP 计算）----
 const DIRECT_MODELS = [

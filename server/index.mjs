@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
-import { complete as completeModel, modelsStatus, primaryModel, OVH_KEYED } from './models.mjs';
+import { complete as completeModel, modelsStatus, primaryModel, OVH_KEYED, KEYED_CONFIGURED } from './models.mjs';
 import {
   accountsInfo, getState, initAccounts, login, logout, putState, register, userForToken,
 } from './db.mjs';
@@ -15,7 +15,7 @@ const RATE_LIMIT_MAX = 30;
 const AUTH_RATE_LIMIT_MAX = 12;
 const ROLES = new Set(['ORCHESTRATOR', 'PRODUCT', 'BUILDER', 'REVIEWER', 'PLEASER']);
 const REQUEST_FIELDS = new Set([
-  'role', 'system', 'user', 'json', 'temperature', 'maxTokens', 'builderFamily',
+  'role', 'system', 'user', 'json', 'temperature', 'maxTokens', 'builderFamily', 'provider', 'providerKey',
 ]);
 const ALLOWED_ORIGINS = new Set([
   'https://forgecrew-studio.onrender.com',
@@ -182,6 +182,15 @@ function validateCompletionRequest(body) {
   ) {
     throw new ApiError(400, 'HTTP', 'builderFamily 必须是不超过 128 字符的字符串');
   }
+  if (body.provider !== undefined && !['dashscope', 'modelscope', 'openrouter'].includes(body.provider)) {
+    throw new ApiError(400, 'HTTP', 'provider 无效');
+  }
+  if (
+    body.providerKey !== undefined
+    && (typeof body.providerKey !== 'string' || body.providerKey.length > 300)
+  ) {
+    throw new ApiError(400, 'HTTP', 'providerKey 无效');
+  }
 
   return {
     role: body.role,
@@ -190,6 +199,8 @@ function validateCompletionRequest(body) {
     json: body.json ?? false,
     temperature: body.temperature ?? (body.role === 'BUILDER' ? 0.7 : 0.4),
     maxTokens: body.maxTokens ?? (body.role === 'BUILDER' ? 4096 : 1400),
+    provider: body.provider,
+    providerKey: body.providerKey,
   };
 }
 
@@ -352,7 +363,7 @@ async function handleRequest(req, res) {
     const payload = {
       ok: true,
       service: 'api',
-      provider: OVH_KEYED ? 'keyed' : 'keyless',
+      provider: KEYED_CONFIGURED || OVH_KEYED ? 'keyed' : 'keyless',
       providerName: primary.name,
       model: primary.id,
       models: modelsStatus(),
@@ -372,7 +383,7 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/models') {
     if (req.method !== 'GET') throw new ApiError(405, 'HTTP', '请求方法不允许', { Allow: 'GET' });
-    sendJson(res, 200, { models: modelsStatus(), primary: primaryModel().id });
+    sendJson(res, 200, { models: modelsStatus(), primary: primaryModel().id, keyed: KEYED_CONFIGURED });
     return;
   }
 

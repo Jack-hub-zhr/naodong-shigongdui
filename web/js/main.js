@@ -12,7 +12,7 @@ import {
 } from './store.js';
 import {
   complete, heartbeat, ApiError, authMe, registerAccount, loginAccount, logoutAccount,
-  loadCloudState, saveCloudState,
+  loadCloudState, saveCloudState, qwenProviderConfig, setQwenProviderConfig, QWEN_PROVIDERS,
 } from './api.js';
 import { advance, resumeFromPause, inspect, applyBaseStyle } from './pipeline.js';
 
@@ -32,6 +32,7 @@ const ui = {
   sheet: null,
   palette: null,
   paletteIndex: 0,
+  chatBusy: false,
   cleared: false,
   decisionIndex: 0,
   follow: false,
@@ -240,6 +241,7 @@ function renderTopbar() {
         ${ICONS.sliders}<span class="label">团队</span>
         <span class="badge">${workingCount(agents)}</span>
       </button>
+      <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">?</button>
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="切换主题" title="切换暗色 / 亮色">
         ${ICONS.sun}
       </button>
@@ -740,10 +742,28 @@ function ensureTeamChat(p) {
 function chatMessageHtml(m) {
   const role = ROLES[m.role] || ROLES.SYSTEM;
   const me = m.role === 'USER';
+  const tag = m.kind === 'requirement' ? '<span class="chat-tag">已记入要求</span>' : '';
+  const rebuild = m.action === 'rebuild'
+    ? '<button class="btn small chat-rebuild" type="button" data-chat-rebuild>按新要求再做一版</button>'
+    : '';
   return `<div class="chat-msg ${me ? 'me' : ''}">
     <span class="chat-avatar">${esc(role.letter)}</span>
-    <div class="chat-bubble"><b>${esc(role.name)}</b><p>${esc(m.text)}</p></div>
+    <div class="chat-bubble"><b>${esc(role.name)}</b><p>${esc(m.text)}</p>${tag}${rebuild}</div>
   </div>`;
+}
+
+function chatTypingHtml() {
+  return `<div class="chat-msg chat-typing">
+    <span class="chat-avatar">统</span>
+    <div class="chat-bubble"><b>统筹者</b><p>正在看项目进度并回复<span class="typing-dots"><i></i><i></i><i></i></span></p></div>
+  </div>`;
+}
+
+function scrollChatBottom() {
+  requestAnimationFrame(() => {
+    const log = document.getElementById('team-chat-log');
+    if (log) log.scrollTop = log.scrollHeight;
+  });
 }
 
 function teamChatHtml(p) {
@@ -752,42 +772,135 @@ function teamChatHtml(p) {
   return `<section class="section team-chat" id="team-chat">
     <div class="section-head">
       <h2>团队聊天</h2>
-      <span class="meta">5 位成员在线 · 说一句，全队都会回应</span>
+      <span class="meta">${(p.extraRequirements || []).length ? `已记录 ${p.extraRequirements.length} 条要求 · ` : ''}说一句，团队会真的回复</span>
     </div>
-    <div class="chat-log" id="team-chat-log">${list.map(chatMessageHtml).join('')}</div>
+    <div class="chat-log" id="team-chat-log">${list.map(chatMessageHtml).join('')}${p.chatPending ? chatTypingHtml() : ''}</div>
     <form class="chat-form" id="team-chat-form">
-      <input id="team-chat-input" name="message" type="text" maxlength="120" placeholder="对团队说点什么…" autocomplete="off" aria-label="团队聊天输入">
+      <input id="team-chat-input" name="message" type="text" maxlength="240" placeholder="对团队说点什么…" autocomplete="off" aria-label="团队聊天输入">
       <button class="btn primary" type="submit">发送</button>
     </form>
   </section>`;
 }
 
-function sendTeamChat(text) {
+function looksLikeRequirement(text) {
+  return /(加|新增|增加|改|换|删|去掉|不要|必须|希望|想要|优化|调整|做成|变成|颜色|字体|按钮|布局|交互|动效|文案|风格|更大|更小|更清晰|更简洁|更专业|vibe)/i.test(text);
+}
+
+function addChatRequirement(p, text) {
+  const clean = String(text || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!clean) return false;
+  p.extraRequirements = p.extraRequirements || [];
+  if (p.extraRequirements.includes(clean)) return true;
+  p.extraRequirements.push(clean);
+  p.extraRequirements = p.extraRequirements.slice(-8);
+  return true;
+}
+
+function parseChatReply(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const unfenced = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = unfenced.indexOf('{');
+  const end = unfenced.lastIndexOf('}');
+  const candidates = [unfenced, start >= 0 && end > start ? unfenced.slice(start, end + 1) : ''].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      const data = JSON.parse(candidate);
+      if (data && typeof data.reply === 'string' && data.reply.trim()) {
+        return {
+          reply: data.reply.trim().slice(0, 220),
+          requirement: typeof data.requirement === 'string' ? data.requirement.trim().slice(0, 100) : '',
+        };
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+async function sendTeamChat(text) {
   const p = state.project;
-  const clean = String(text || '').trim().slice(0, 120);
+  const clean = String(text || '').trim().slice(0, 240);
   if (!p || !clean) return;
+  if (ui.chatBusy || p.chatPending) {
+    toast('团队正在回复上一条，稍等', 'err');
+    return;
+  }
   ensureTeamChat(p);
-  const name = accountDisplayName();
   const now = Date.now();
   p.chat = p.chat || [];
   p.chat.push({ id: 'c_' + now.toString(36) + '_u', role: 'USER', text: clean, ts: now });
-  CREW_ORDER.forEach((role, i) => {
-    p.chat.push({
-      id: 'c_' + now.toString(36) + '_' + i,
-      role,
-      text: `向${name}敬礼！`,
-      ts: now + 120 + i * 120,
-      salute: true,
-    });
-  });
+  p.chatPending = true;
   p.chat = p.chat.slice(-60);
+  ui.chatBusy = true;
   saveNow();
   renderPage();
-  hydrate();
-  requestAnimationFrame(() => {
-    const input = document.getElementById('team-chat-input');
-    if (input) input.focus({ preventScroll: true });
-  });
+  scrollChatBottom();
+
+  const statusText = STATUS[p.status] || p.status || '进行中';
+  const recent = (p.chat || []).slice(-7, -1).map((m) => {
+    const role = ROLES[m.role] || ROLES.SYSTEM;
+    return `${role.name}：${m.text}`;
+  }).join('\n');
+  const context = `工程：《${p.prompt}》
+标签：${p.tag} · 风格：${p.style || 'product'}
+阶段：${p.phase} · 轮次：${p.round} · 状态：${statusText}
+规格概述：${p.spec?.summary || '（暂无）'}
+完成标准：${(p.spec?.acceptance || []).join('；') || '（暂无）'}
+已记录的聊天要求：${(p.extraRequirements || []).join('；') || '（暂无）'}
+最近对话：
+${recent || '（这是第一句）'}
+
+用户刚刚说：${clean}`;
+  const system = `你是 ForgeCrew 的统筹者，在团队聊天里直接回复委托用户。团队有统筹者、策划者、编程者、检查者、打磨者五个角色，你做统一发言。
+要求：
+1. 用中文，像真人同事，1 到 2 句，不超过 70 字，承接项目当前阶段，不说空话。
+2. 不要假装已经改完页面；正在制作就说会在下一轮带上，已交付就提示用户可以再做一版。
+3. 如果用户在提功能、视觉、文案、交互的新要求或修改意见，把可执行的那一句提炼到 requirement；纯聊天、提问、催促、表扬则 requirement 为空字符串。
+4. 只输出 JSON：{"reply":"回复内容","requirement":"可执行要求或空字符串"}，不要输出 Markdown。`;
+
+  let reply = '';
+  let requirement = '';
+  let failed = false;
+  try {
+    const res = await complete({
+      role: 'ORCHESTRATOR', system, user: context, json: true, maxTokens: 700, temperature: 0.45,
+    });
+    const parsed = parseChatReply(res.text);
+    if (!parsed) throw new ApiError('PARSE', '团队回复格式不完整');
+    reply = parsed.reply;
+    requirement = parsed.requirement;
+  } catch (err) {
+    failed = true;
+    reply = '服务连接这次没接通，消息已留在聊天里，但团队没有生成回复。可以稍后重发，或到「我的」填入自己的 Qwen Key 再试。';
+    if (looksLikeRequirement(clean)) requirement = clean;
+  }
+
+  const applied = requirement ? addChatRequirement(p, requirement) : false;
+  const replyMsg = {
+    id: 'c_' + (now + 1).toString(36) + '_r',
+    role: 'ORCHESTRATOR',
+    text: reply,
+    ts: Date.now(),
+    kind: applied ? 'requirement' : undefined,
+    action: applied && p.status === 'DELIVERED' ? 'rebuild' : undefined,
+  };
+  if (applied) {
+    replyMsg.text = `${reply}（已记入要求：${requirement}）`;
+    addLog(p, 'ORCHESTRATOR', `聊天新增要求：${requirement}`, 'wait');
+    if (p.status === 'DELIVERED') {
+      replyMsg.text = `${reply}（已记入要求：${requirement}。点下面的按钮可立即带上它做一版）`;
+    }
+  }
+  p.chat.push(replyMsg);
+  p.chat = p.chat.slice(-60);
+  p.chatPending = false;
+  ui.chatBusy = false;
+  saveNow();
+  renderPage();
+  scrollChatBottom();
+  if (failed) toast('团队回复失败，已如实提示', 'err');
+  const input = document.getElementById('team-chat-input');
+  if (input) input.focus({ preventScroll: true });
 }
 
 function buildHtml() {
@@ -987,6 +1100,167 @@ function channelStatus() {
   return { tone: 'fail', text: '可能已冷却（超过 15 分钟）' };
 }
 
+function maskKey(key) {
+  if (!key) return '未填写';
+  return key.length <= 8 ? '已保存' : `${key.slice(0, 4)}…${key.slice(-4)}`;
+}
+
+function qwenProviderHtml() {
+  const cfg = qwenProviderConfig();
+  const current = QWEN_PROVIDERS.find((x) => x.id === cfg.provider) || QWEN_PROVIDERS[0];
+  return `<div class="panel provider-panel">
+    <h3>Qwen 直连 <span class="chip-mini">可选</span></h3>
+    <div class="desc">公共五模型链在排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
+    <div class="provider-form">
+      <label class="provider-field">
+        <span>服务商</span>
+        <select id="qwen-provider-select">
+          ${QWEN_PROVIDERS.map((x) => `<option value="${x.id}" ${x.id === cfg.provider ? 'selected' : ''}>${x.name} · ${x.model}</option>`).join('')}
+        </select>
+      </label>
+      <label class="provider-field">
+        <span>API Key</span>
+        <input id="qwen-provider-key" type="password" autocomplete="off" spellcheck="false" placeholder="${cfg.key ? '已保存，重新填写可替换' : current.hint}" aria-label="Qwen API Key">
+      </label>
+      <div class="provider-actions">
+        <button class="btn small primary" id="qwen-provider-save" type="button">保存到本机</button>
+        <button class="btn small" id="qwen-provider-clear" type="button">清除</button>
+        <a class="provider-help" href="${current.url}" target="_blank" rel="noreferrer">获取 Key ↗</a>
+      </div>
+    </div>
+    <div class="provider-state">${cfg.key
+      ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
+      : '当前未填 Key，继续使用服务端公共五模型链'}</div>
+    <div class="provider-tip">百炼新账号每个模型通常有独立的免费额度；魔搭需绑定阿里云并实名；OpenRouter 免费模型有每日次数上限。额度以服务商页面为准。</div>
+  </div>`;
+}
+
+
+// ---------------- 使用说明 ----------------
+function guideSeenKey() {
+  return 'fc-guide-seen:' + (state.user?.id || 'guest');
+}
+
+function guideSeen() {
+  try { return localStorage.getItem(guideSeenKey()) === '1'; } catch (e) { return false; }
+}
+
+function markGuideSeen() {
+  try { localStorage.setItem(guideSeenKey(), '1'); } catch (e) {}
+}
+
+function guideHtml() {
+  return `<div class="guide-scrim" data-guide-close></div>
+  <div class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+    <div class="guide-head">
+      <div>
+        <div class="eyebrow">FORGECREW · 快速上手</div>
+        <h2 id="guide-title">两分钟看完，随时可以关</h2>
+        <p>这里只写真正会用到的操作。看不完也没关系，截图可以点开放大，右上角 <b>?</b> 随时再打开。</p>
+      </div>
+      <button class="guide-close" type="button" data-guide-close aria-label="关闭说明">×</button>
+    </div>
+    <div class="guide-body">
+      <section class="guide-step">
+        <span class="guide-no">01</span>
+        <div>
+          <h3>写一句想法，选好风格就能开工</h3>
+          <p>在首页写清楚“做什么、给谁用、最想要的效果”。标签决定页面骨架，风格决定气质；高级选项可以补上不要什么、参考感觉。点“让团队开工”，五个角色开始接手。</p>
+          <figure><a href="/assets/guide/home.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/home.webp" alt="首页新建项目界面" loading="lazy"></a><figcaption>首页：一句话 + 标签 + 风格，三步开工。</figcaption></figure>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">02</span>
+        <div>
+          <h3>四个阶段会自动往下走</h3>
+          <p>明确 → 制作 → 检查 → 交付。顶部会显示当前阶段、轮次和成员状态。中途可以暂停、继续；不想做了可以删除。只有到了“需要你确认”，才真的需要你出手。</p>
+          <figure><a href="/assets/guide/project.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/project.webp" alt="项目页四个阶段与团队状态" loading="lazy"></a><figcaption>项目页：阶段、进度、团队状态一眼看清。</figcaption></figure>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">03</span>
+        <div>
+          <h3>需要你确认时，二选一就行</h3>
+          <p>团队会把两条都能走通的方案摆出来，写清代价和适用场景。选一个，点确认，团队继续。两项都选过之后按钮才能继续，避免漏选。</p>
+          <figure><a href="/assets/guide/decision.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/decision.webp" alt="需要你确认时的两个方案" loading="lazy"></a><figcaption>确认卡：两项都拍板后才会放行。</figcaption></figure>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">04</span>
+        <div>
+          <h3>团队交接记录，能查每一步是谁做的</h3>
+          <p>每次角色交接都会留下一条：谁交给谁、交付了什么、为什么。最新的一条在最上面，最多保留最近 6 条。它不是角色介绍，而是这次项目真实发生过的事。</p>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">05</span>
+        <div>
+          <h3>聊天不是摆设，可以直接改需求</h3>
+          <p>在项目页底部对团队说一句话，统筹者会真的读项目进度再回复。如果你在提新要求，它会自动记成一条“要求”，下一轮制作会带上；已交付的项目会多出一个“按新要求再做一版”的按钮。</p>
+          <figure><a href="/assets/guide/chat.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/chat.webp" alt="团队聊天真实回复与新要求" loading="lazy"></a><figcaption>聊天：真回复，也能把新要求写进下一轮。</figcaption></figure>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">06</span>
+        <div>
+          <h3>成品能打开、导出、分享，也能回到旧版</h3>
+          <p>交付后可以全屏打开成品、导出 HTML、复制分享链接，或者“再做一版”。10 分钟内还能撤回确认，重新选方案。历史版本区里，每个旧版本都有“回到这版”，二次确认后会把项目切回那一版。</p>
+        </div>
+      </section>
+      <section class="guide-step">
+        <span class="guide-no">07</span>
+        <div>
+          <h3>账号、外观和模型连接</h3>
+          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用。公共模型链排队时，可以填入自己的 Qwen Key，只保存在这台浏览器，不进入账号同步。</p>
+          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与 Qwen 连接" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接与历史。</figcaption></figure>
+        </div>
+      </section>
+    </div>
+    <div class="guide-foot">
+      <span>首次登录会自动打开一次；关掉后不再打扰。</span>
+      <div class="guide-actions">
+        <button class="btn" type="button" data-guide-close>先跳过</button>
+        <button class="btn primary" type="button" data-guide-close>开始使用</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function closeGuide() {
+  const modal = overlayRoot.querySelector('.guide-modal');
+  if (!modal) return;
+  modal.classList.add('closing');
+  const scrim = overlayRoot.querySelector('.guide-scrim');
+  if (scrim) scrim.classList.add('closing');
+  setTimeout(() => {
+    overlayRoot.querySelectorAll('.guide-modal, .guide-scrim').forEach((el) => el.remove());
+    document.body.classList.remove('guide-open');
+  }, 180);
+  const opener = ui.guideOpener;
+  if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+}
+
+function openGuide() {
+  if (overlayRoot.querySelector('.guide-modal')) return;
+  markGuideSeen();
+  const scrim = document.createElement('div');
+  scrim.className = 'guide-plain';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = guideHtml();
+  const nodes = [...wrap.children];
+  const guideScrim = nodes.find((el) => el.classList.contains('guide-scrim'));
+  const modal = nodes.find((el) => el.classList.contains('guide-modal'));
+  ui.guideOpener = document.activeElement;
+  overlayRoot.append(guideScrim, modal);
+  document.body.classList.add('guide-open');
+  requestAnimationFrame(() => { modal.classList.add('open'); guideScrim.classList.add('open'); });
+}
+
+function maybeOpenGuide() {
+  if (!state.user || guideSeen()) return;
+  setTimeout(() => { if (!overlayRoot.querySelector('.guide-modal')) openGuide(); }, 900);
+}
+
 function profileHtml() {
   const p = state.project;
   const hb = channelStatus();
@@ -1041,7 +1315,7 @@ function profileHtml() {
 
       <div class="panel">
         <h3>制作服务连接</h3>
-        <div class="desc">服务端统一调度，浏览器不持有密钥。</div>
+        <div class="desc">公共链自动调度；填入自己的 Key 后可优先走你的 Qwen 服务。</div>
         <div class="channel-row">
           <span class="dot ${hb.tone === 'fail' ? 'err' : hb.tone === 'wait' ? 'wait' : 'ok'}"></span>
           <div class="txt"><b>${COPY.channel}</b><span>${esc(hb.text)}</span></div>
@@ -1059,6 +1333,7 @@ function profileHtml() {
           <span style="color:var(--text-3)">07:00–23:59 每 15 分钟只保 API，冷启动通常 < 30 秒。</span>
         </div>
       </div>
+      ${qwenProviderHtml()}
     </div>
 
     <div>
@@ -1080,6 +1355,7 @@ function profileHtml() {
           <div><b>${BRAND.name} · ${BRAND.version}</b><span>Agent crew · idea to acceptance</span></div>
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
+        <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
         <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 双主题 · 石墨 / 纸白 · 单一暖色强调</span></div>
         <div class="about-row"><span>生成服务</span><span class="side">${esc(p?.providerName || COPY.channelShort)} · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
@@ -1112,6 +1388,45 @@ document.addEventListener('click', (ev) => {
 
   if (ev.target.closest('#delete-task')) {
     deleteTask();
+    return;
+  }
+
+  if (ev.target.closest('#open-guide') || ev.target.closest('[data-open-guide]')) {
+    openGuide();
+    return;
+  }
+
+  if (ev.target.closest('[data-guide-close]')) {
+    closeGuide();
+    return;
+  }
+
+  if (ev.target.closest('[data-chat-rebuild]')) {
+    anotherVersion();
+    return;
+  }
+
+  if (ev.target.closest('#qwen-provider-save')) {
+    const select = document.getElementById('qwen-provider-select');
+    const input = document.getElementById('qwen-provider-key');
+    const key = String(input?.value || '').trim();
+    if (!key) {
+      toast('先粘贴一个 API Key；没有 Key 就继续用公共链', 'err');
+      return;
+    }
+    if (setQwenProviderConfig(select?.value || 'dashscope', key)) {
+      toast('已保存到本机，后续制作和聊天优先走你的 Qwen', 'ok');
+      renderPage();
+    } else {
+      toast('浏览器不允许写入本地存储', 'err');
+    }
+    return;
+  }
+
+  if (ev.target.closest('#qwen-provider-clear')) {
+    setQwenProviderConfig('dashscope', '');
+    toast('已清除本机 Key，回到公共五模型链', 'ok');
+    renderPage();
     return;
   }
 
@@ -1357,7 +1672,8 @@ document.addEventListener('keydown', (ev) => {
     if (ui.palette) closePalette(); else openPalette();
   }
   if (ev.key === 'Escape') {
-    if (ui.palette) closePalette();
+    if (overlayRoot.querySelector('.guide-modal')) closeGuide();
+    else if (ui.palette) closePalette();
     else if (ui.sheet) closeCrewSheet();
     else if (document.querySelector('.drawer')) closeDrawer();
   }
@@ -1598,6 +1914,7 @@ function anotherVersion() {
   if (!p) return;
   const next = newProject(p.prompt, p.tag);
   next.style = p.style || 'product';
+  next.extraRequirements = (p.extraRequirements || []).slice(-8);
   next.versions = [];
   state.project = next;
   state.logs = [];
@@ -1993,6 +2310,7 @@ async function submitAuth(form) {
     closeAuth(true);
     await hydrateAfterLogin();
     toast(`欢迎，${user.name}`, 'ok');
+    maybeOpenGuide();
   } catch (error) {
     ui.authBusy = false;
     rerenderAuth();
@@ -2046,6 +2364,7 @@ async function initAccount() {
     }
     renderAll();
     resumeIfNeeded();
+    maybeOpenGuide();
   } catch (error) {
     state.user = null;
     state.cloudError = error?.message || '';
@@ -2114,6 +2433,15 @@ async function pollHeartbeat() {
   try { localStorage.setItem(KEYS.heartbeat, JSON.stringify(state.heartbeat)); } catch (e) {}
   if (state.route === 'profile' || state.route === 'idea') renderPage();
 }
+
+document.addEventListener('change', (ev) => {
+  if (ev.target?.id !== 'qwen-provider-select') return;
+  const provider = QWEN_PROVIDERS.find((x) => x.id === ev.target.value) || QWEN_PROVIDERS[0];
+  const input = document.getElementById('qwen-provider-key');
+  const help = document.querySelector('.provider-help');
+  if (input && !qwenProviderConfig().key) input.placeholder = provider.hint;
+  if (help) help.href = provider.url;
+});
 
 document.addEventListener('submit', (ev) => {
   if (ev.target?.id === 'team-chat-form') {
