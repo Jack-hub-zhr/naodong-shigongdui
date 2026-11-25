@@ -314,7 +314,7 @@ export function newProject(prompt, tag) {
     artifact: null,
     report: null,
     delight: [],
-    providerName: '团队共用服务',
+    providerName: '五模型链',
     callsToday: 0,
     agentRuntime: {},
     awaitReason: null,
@@ -497,7 +497,7 @@ export function deriveAgents(p, now = Date.now()) {
       elapsedMs: p ? runtimeElapsed(p, key, p.status === 'PAUSED' ? p.pausedAt || now : now) : 0,
       recent: ((p && p.agentRuntime && p.agentRuntime[key]?.recent) || []).slice(0, 3),
       tone: toneOf(s),
-      model: (p && p.providerName) || '团队共用服务',
+      model: (p && p.providerName) || '五模型链',
     };
   });
 }

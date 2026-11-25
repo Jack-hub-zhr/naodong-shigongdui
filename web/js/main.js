@@ -454,11 +454,11 @@ function ideaHtml() {
       <div class="recipe-list recipes">${recipeList()}</div>
       <div class="team-mini">
         <div class="aside-title" style="margin-top:18px">这五个人怎么接</div>
-        <div class="team-row"><b>岚</b><span>拆成 4 个场景，定 3 轮上限</span></div>
-        <div class="team-row"><b>满</b><span>写下什么算完成</span></div>
-        <div class="team-row"><b>码</b><span>先跑一遍再交出去</span></div>
-        <div class="team-row"><b>尺</b><span>只认断言，不认感觉</span></div>
-        <div class="team-row"><b>润</b><span>收字、收色、收动效</span></div>
+        <div class="team-row"><b>统筹者</b><span>拆成 4 个场景，定 3 轮上限</span></div>
+        <div class="team-row"><b>策划者</b><span>写下什么算完成</span></div>
+        <div class="team-row"><b>编程者</b><span>先跑一遍再交出去</span></div>
+        <div class="team-row"><b>检查者</b><span>只认断言，不认感觉</span></div>
+        <div class="team-row"><b>打磨者</b><span>收字、收色、收动效</span></div>
       </div>
     </aside>
   </div>
