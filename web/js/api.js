@@ -173,7 +173,7 @@ export async function complete(req) {
   try {
     return await completeViaServer(req);
   } catch (err) {
-    if (['RATE_LIMIT', 'HTTP', 'NETWORK'].includes(err?.kind)) {
+    if (err && err.kind !== 'QUOTA') {
       try { return await completeDirect(req); } catch (e) {}
     }
     throw err;
