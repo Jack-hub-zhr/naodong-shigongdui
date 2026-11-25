@@ -271,7 +271,7 @@ function agentCard(a, opts = {}) {
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
   const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
-  const saluting = a.key === ROLES.ORCHESTRATOR.key || Boolean(state.project?.saluteUntil && Date.now() < state.project.saluteUntil);
+  const saluting = a.key === ROLES.ORCHESTRATOR.key;
   return `<button class="agent-card ${opts.mini ? 'mini' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">

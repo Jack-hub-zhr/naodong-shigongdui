@@ -25,7 +25,7 @@ function timeoutSignal(ms) {
  * POST /api/complete
  * body: { role, system, user, json, temperature, maxTokens }
  */
-export async function complete(req) {
+async function completeViaServer(req) {
   const url = API.endpoint('/api/complete');
   const maxTokens = Math.min(8192, req.maxTokens || (req.role === 'BUILDER' ? 7000 : 1500));
   let lastMessage = '服务端不可用';
@@ -84,6 +84,102 @@ export async function complete(req) {
 
   throw new ApiError('NETWORK', lastMessage);
 }
+
+// ---- 浏览器直连（免密钥额度按访问者 IP 计算）----
+const DIRECT_MODELS = [
+  { id: 'ovh-qwen3.8-27b', name: 'OVH · Qwen3.8-27B', family: 'Qwen3.8', model: 'Qwen3.8-27B', kind: 'ovh' },
+  { id: 'ovh-qwen3.6-27b', name: 'OVH · Qwen3.6-27B', family: 'Qwen3.6', model: 'Qwen3.6-27B', kind: 'ovh' },
+  { id: 'ovh-qwen3.5-9b', name: 'OVH · Qwen3.5-9B', family: 'Qwen3.5', model: 'Qwen3.5-9B', kind: 'ovh' },
+  { id: 'ovh-qwen3.5-397b', name: 'OVH · Qwen3.5 397B-A17B', family: 'Qwen3.5', model: 'Qwen3.5-397B-A17B', kind: 'ovh' },
+  { id: 'pl-openai-fast', name: 'Pollinations · openai-fast', family: 'GPT-OSS', model: 'openai-fast', kind: 'pl' },
+];
+const OVH_DIRECT = 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions';
+const PL_DIRECT = 'https://text.pollinations.ai/openai';
+const directCool = new Map();
+
+async function directOne(model, req, maxTokens, jsonMode) {
+  if ((directCool.get(model.id) || 0) > Date.now()) return null;
+  const { signal, cancel } = timeoutSignal(90_000);
+  const body = model.kind === 'ovh'
+    ? {
+        model: model.model,
+        messages: [{ role: 'system', content: req.system }, { role: 'user', content: req.user }],
+        temperature: req.temperature ?? 0.4,
+        max_tokens: maxTokens,
+        stream: false,
+        reasoning_effort: 'none',
+        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      }
+    : {
+        model: model.model,
+        messages: [
+          { role: 'system', content: req.system },
+          { role: 'user', content: `${req.user}\n\n[请求 ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}]` },
+        ],
+        temperature: req.temperature ?? 0.4,
+        max_tokens: maxTokens,
+        private: true,
+        seed: Math.floor(Math.random() * 1_000_000_000),
+      };
+  let response;
+  try {
+    response = await fetch(model.kind === 'ovh' ? OVH_DIRECT : PL_DIRECT, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    cancel();
+    return null;
+  }
+  cancel();
+  if (!response.ok) {
+    directCool.set(model.id, Date.now() + (response.status === 429 ? 65_000 : 20_000));
+    return null;
+  }
+  const data = await response.json().catch(() => null);
+  const text = data?.choices?.[0]?.message?.content;
+  const finish = data?.choices?.[0]?.finish_reason;
+  if (typeof text !== 'string' || !text.trim() || finish === 'length') return null;
+  return {
+    text: text.trim(),
+    provider: 'direct',
+    providerName: model.name,
+    family: model.family,
+    model: model.id,
+  };
+}
+
+async function completeDirect(req) {
+  const baseTokens = Math.min(8192, req.maxTokens || (req.role === 'BUILDER' ? 7000 : 1500));
+  let jsonMode = Boolean(req.json);
+  let tokens = baseTokens;
+  for (const model of DIRECT_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const result = await directOne(model, req, tokens, jsonMode);
+      if (result) {
+        bumpCalls();
+        return result;
+      }
+      if (jsonMode) { jsonMode = false; continue; }
+      break;
+    }
+  }
+  throw new ApiError('RATE_LIMIT', '所有服务连接都在排队，请稍后重试', 429);
+}
+
+export async function complete(req) {
+  try {
+    return await completeViaServer(req);
+  } catch (err) {
+    if (['RATE_LIMIT', 'HTTP', 'NETWORK'].includes(err?.kind)) {
+      try { return await completeDirect(req); } catch (e) {}
+    }
+    throw err;
+  }
+}
+
 
 export async function heartbeat() {
   const url = API.endpoint('/healthz');

@@ -40,7 +40,7 @@ curl localhost:3001/healthz
 | `OVH_API_KEY` | 可选。OVHcloud AI Endpoints 的 Key；不配也能匿名调用，但匿名额度极小 |
 | `DATA_FILE` | 账号库路径，默认 `data/accounts.json` |
 
-模型按顺序降级：`Qwen3.8-27B → Qwen3.6-27B → Qwen3.5-9B → Qwen3.5-397B-A17B → Pollinations openai-fast`。OVH 匿名额度约每个模型/IP/年 2 次；额度用尽会自动冷却并切到下一档。需要稳定额度时配置 `OVH_API_KEY`。
+模型按顺序降级：`Qwen3.8-27B → Qwen3.6-27B → Qwen3.5-9B → Qwen3.5-397B-A17B → Pollinations openai-fast`。OVH 匿名额度约每个模型/IP/年 2 次；服务端额度用尽后，前端会自动改为浏览器直连，匿名额度按访问者 IP 重新计算。需要稳定额度时配置 `OVH_API_KEY`。
 
 密钥只在服务端读取，浏览器不保存、不转发。账号密码用 `scrypt` 哈希，登录态是 30 天 Bearer token，数据库只存 token 的 SHA-256。
 
