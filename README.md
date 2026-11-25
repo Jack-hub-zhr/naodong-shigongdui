@@ -38,8 +38,8 @@ curl localhost:3001/healthz
 | --- | --- |
 | `PORT` | 服务端口，默认 3000 |
 | `OVH_API_KEY` | 可选。OVHcloud AI Endpoints 的 Key；不配也能匿名调用，但匿名额度极小 |
-| `GROQ_API_KEY` | 推荐。Groq 免费层 Key，服务端优先走 `qwen/qwen3.8-27b`（约 30 RPM、1000 次/天） |
-| `DASHSCOPE_API_KEY` | 推荐。阿里云百炼 Key，服务端优先走 `qwen-plus` |
+| `GROQ_API_KEY` | 可选（需外网）。Groq 免费层 Key，优先走 `qwen/qwen3.8-27b`（约 30 RPM、1000 次/天） |
+| `DASHSCOPE_API_KEY` | 国内推荐。阿里云百炼 Key，优先走 `qwen-plus` |
 | `MODELSCOPE_API_KEY` | 可选。魔搭 SDK Token，备用 `Qwen/Qwen3.8-27B` |
 | `OPENROUTER_API_KEY` | 可选。OpenRouter Key，备用 `qwen/qwen3-coder:free` |
 | `DASHSCOPE_BASE_URL` | 可选。覆盖百炼兼容端点，默认北京地域 |

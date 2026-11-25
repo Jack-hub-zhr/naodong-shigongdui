@@ -2,16 +2,16 @@
 
 结论先说：**没有任何公开、免 Key、还能稳定承载整站调用的 Qwen 接口。** 免 Key 的 OVH 与 Pollinations 都只能当临时兜底；要真正稳定，必须至少配置一个服务商 Key。额度会调整，以下数字以服务商当期页面为准。
 
-最推荐先开 **Groq** 的免费 Key：不需要信用卡，免费层约 **30 次/分钟、1000 次/天、20 万 Token/天**，模型为 `qwen/qwen3.8-27b`。如果主要跑长上下文或整站构建，OpenRouter 的免费 `qwen/qwen3-coder:free` 也可以，但免费额度通常只有每天几十次，以实际 429 为准。
+最推荐国内网络先开 **阿里云百炼**：控制台和 API 都在国内，不需要 VPN，新账号通常有 90 天、每个模型约 100 万 Token 的免费额度，模型 `qwen-plus`。如果不想实名或需要每天重置的免费层，可以用 **魔搭**。**Groq** 的免费层更慷慨（约 30 次/分钟、1000 次/天），但控制台在国内经常打不开，只适合能稳定访问外网的情况。
 
 ## 可选路线
 
 | 路线 | 免费额度 | 端点 | 适合 |
 | --- | --- | --- | --- |
-| Groq | 免费层约 30 RPM、1000 次/天、8K TPM、20 万 Token/天，免信用卡 | `https://api.groq.com/openai/v1/chat/completions` | 首选。`qwen/qwen3.8-27b`，速度最快，但每分钟 Token 限额较紧 |
-| OpenRouter | 免费模型约 20 RPM；日额度存在 50 / 200 / 1000 的口径差异，以实际 429 为准 | `https://openrouter.ai/api/v1/chat/completions` | 轻量备用。`qwen/qwen3-coder:free`，免费名单会轮换 |
-| 阿里云百炼 DashScope | 实名后通常每个模型独立 100 万 Token、90 天（以控制台为准） | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | 主力。OpenAI 兼容，`qwen-plus` 稳定，地域多限华北2（北京） |
-| 魔搭 ModelScope API-Inference | 注册并绑定阿里云、实名；按模型每日免费配额 + 魔粒 | `https://api-inference.modelscope.cn/v1/chat/completions` | 第二顺位。可跑 `Qwen/Qwen3.8-27B`，官方明确不适合高并发和 SLA 线上业务 |
+| Groq | 免费层约 30 RPM、1000 次/天、8K TPM、20 万 Token/天，免信用卡；国内需外网 | `https://api.groq.com/openai/v1/chat/completions` | 外网可用时首选。`qwen/qwen3.8-27b`，速度最快，但每分钟 Token 限额较紧 |
+| OpenRouter | 免费模型约 20 RPM；日额度存在 50 / 200 / 1000 的口径差异，以实际 429 为准；国内需外网 | `https://openrouter.ai/api/v1/chat/completions` | 外网备用。`qwen/qwen3-coder:free`，免费名单会轮换 |
+| 阿里云百炼 DashScope | 实名后通常每个模型独立 100 万 Token、90 天（以控制台为准） | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | 国内首选。OpenAI 兼容，`qwen-plus` 稳定，控制台国内直连 |
+| 魔搭 ModelScope API-Inference | 注册并绑定阿里云、实名；按模型每日免费配额 + 魔粒 | `https://api-inference.modelscope.cn/v1/chat/completions` | 国内备用。可跑 `Qwen/Qwen3.8-27B`，官方明确不适合高并发和 SLA 线上业务 |
 | Cloudflare Workers AI | 10,000 Neurons / 天 | `https://api.cloudflare.com/client/v4/accounts/<account>/ai/run/...`（非标准 OpenAI 兼容） | 备选。`@cf/qwen/qwen3.8-27b`，有 4006 限额不按 UTC 正常重置的社区反馈 |
 
 ## 本项目已接入什么

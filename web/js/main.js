@@ -1131,7 +1131,7 @@ function qwenProviderHtml() {
     <div class="provider-state">${cfg.key
       ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
       : '当前未填 Key，继续使用服务端公共模型链'}</div>
-    <div class="provider-tip">Groq 免费层约 30 次/分钟、1000 次/天；OpenRouter 免费模型有每日次数上限；百炼新账号有 90 天免费额度；魔搭需绑定阿里云并实名。额度以服务商页面为准。</div>
+    <div class="provider-tip">国内网络优先用百炼或魔搭，控制台打开快、无需 VPN；百炼新账号有 90 天免费额度，魔搭需绑定阿里云并实名。Groq / OpenRouter 需要能稳定访问外网，额度以服务商页面为准。</div>
   </div>`;
 }
 
