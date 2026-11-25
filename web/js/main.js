@@ -1352,6 +1352,16 @@ function dispatchIdea() {
 function pauseTask() {
   const p = state.project;
   if (!p || p.status === 'PAUSED' || p.status === 'DELIVERED') return;
+  const agents = deriveAgents(p);
+  Object.keys(p.agentRuntime || {}).forEach((key) => {
+    const rt = p.agentRuntime[key];
+    const shown = agents.find((a) => a.key === key)?.progress;
+    if (typeof shown === 'number') rt.progressBase = Math.max(rt.progressBase || 0, shown);
+    if (rt.startedAt) {
+      rt.elapsedMs = (rt.elapsedMs || 0) + Math.max(0, Date.now() - rt.startedAt);
+      rt.startedAt = null;
+    }
+  });
   p.pausedFrom = p.status;
   p.status = 'PAUSED';
   p.pausedReason = 'USER';
