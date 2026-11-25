@@ -643,6 +643,12 @@ function stageDetailHtml(p) {
   </section>`;
 }
 
+function humanHandoffNote(note) {
+  const text = String(note || '');
+  if (/data-acceptance|落点/.test(text)) return '有完成标准没有落到页面上';
+  return text;
+}
+
 function handoffsHtml(p) {
   const list = (p?.handoffs || []).slice(-6).reverse();
   if (!list.length) return '';
@@ -657,7 +663,7 @@ function handoffsHtml(p) {
         const to = ROLES[h.to] || ROLES.SYSTEM;
         return `<div class="handoff-row">
           <div class="handoff-route"><b>${esc(from.name)}</b><span class="handoff-arrow">→</span><b>${esc(to.name)}</b></div>
-          <div class="handoff-main"><b>${esc(h.deliverable)}</b>${h.note ? `<span>${esc(h.note)}</span>` : ''}</div>
+          <div class="handoff-main"><b>${esc(h.deliverable)}</b>${h.note ? `<span>${esc(humanHandoffNote(h.note))}</span>` : ''}</div>
           ${h.round ? `<span class="handoff-round">第 ${h.round} 轮</span>` : ''}
         </div>`;
       }).join('')}
