@@ -97,7 +97,7 @@ export function qwenProviderConfig() {
     const raw = JSON.parse(localStorage.getItem(PROVIDER_CONFIG_KEY) || '{}');
     if (!raw || typeof raw !== 'object') return { provider: 'dashscope', key: '' };
     return {
-      provider: ['dashscope', 'modelscope', 'groq', 'openrouter'].includes(raw.provider) ? raw.provider : 'dashscope',
+      provider: ['dashscope', 'siliconflow', 'modelscope', 'groq', 'openrouter'].includes(raw.provider) ? raw.provider : 'dashscope',
       key: typeof raw.key === 'string' ? raw.key : '',
     };
   } catch (e) {
@@ -118,6 +118,7 @@ export function setQwenProviderConfig(provider, key) {
 
 export const QWEN_PROVIDERS = [
   { id: 'dashscope', name: '阿里云百炼', hint: 'sk-…', model: 'qwen-plus', url: 'https://bailian.console.aliyun.com/' },
+  { id: 'siliconflow', name: '硅基流动', hint: 'sk-…', model: 'Qwen/Qwen3-8B', url: 'https://cloud.siliconflow.cn/account/ak' },
   { id: 'modelscope', name: '魔搭 ModelScope', hint: 'ms-…', model: 'Qwen/Qwen3.8-27B', url: 'https://modelscope.cn/' },
   { id: 'groq', name: 'Groq（需外网）', hint: 'gsk_…', model: 'qwen/qwen3.8-27b', url: 'https://console.groq.com/keys' },
   { id: 'openrouter', name: 'OpenRouter（需外网）', hint: 'sk-or-v1-…', model: 'qwen/qwen3-coder:free', url: 'https://openrouter.ai/' },

@@ -32,6 +32,14 @@ export const KEYED_PROVIDERS = [
     env: 'DASHSCOPE_API_KEY',
   },
   {
+    id: 'siliconflow',
+    name: '硅基流动 · Qwen3-8B',
+    family: 'Qwen3',
+    model: 'Qwen/Qwen3-8B',
+    url: 'https://api.siliconflow.cn/v1/chat/completions',
+    env: 'SILICONFLOW_API_KEY',
+  },
+  {
     id: 'modelscope',
     name: '魔搭 · Qwen3.8-27B',
     family: 'Qwen3.8',
@@ -333,6 +341,10 @@ export async function complete(input) {
       }
 
       if (result.status === 0 || result.status >= 500) {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1_200));
+          continue;
+        }
         cool(model, ERROR_COOLDOWN_MS);
         lastMessage = `${model.name} 暂时不可用`;
         break;

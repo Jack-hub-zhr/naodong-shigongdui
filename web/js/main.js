@@ -230,6 +230,8 @@ function crumbsHtml() {
 function renderTopbar() {
   const p = state.project;
   const agents = deriveAgents(p);
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const themeLabel = dark ? '切换为亮色' : '切换为深色';
   const alert = p && p.status === 'AWAITING_USER';
   topbarEl.innerHTML = `
     <div class="crumbs">${crumbsHtml()}</div>
@@ -242,8 +244,8 @@ function renderTopbar() {
         <span class="badge">${workingCount(agents)}</span>
       </button>
       <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">?</button>
-      <button class="icon-btn" id="toggle-theme" type="button" aria-label="切换主题" title="切换暗色 / 亮色">
-        ${ICONS.sun}
+      <button class="icon-btn" id="toggle-theme" type="button" aria-label="${themeLabel}" title="${themeLabel}">
+        ${dark ? ICONS.sun : ICONS.moon}
       </button>
       <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录或注册'}">
         <span class="avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
@@ -1131,7 +1133,7 @@ function qwenProviderHtml() {
     <div class="provider-state">${cfg.key
       ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
       : '当前未填 Key，继续使用服务端公共模型链'}</div>
-    <div class="provider-tip">国内网络优先用百炼或魔搭，控制台打开快、无需 VPN；百炼新账号有 90 天免费额度，魔搭需绑定阿里云并实名。Groq / OpenRouter 需要能稳定访问外网，额度以服务商页面为准。</div>
+    <div class="provider-tip">国内网络优先用<b>硅基流动</b>或百炼、魔搭，控制台打开快、无需 VPN。硅基流动的 Qwen3-8B 是长期免费模型（约 30 次/分钟），注册后可直接创建 Key；百炼新账号有 90 天免费额度，魔搭需绑定阿里云并实名。Groq / OpenRouter 需要能稳定访问外网。</div>
   </div>`;
 }
 
@@ -1596,16 +1598,19 @@ document.addEventListener('click', (ev) => {
   const themeSet = ev.target.closest('[data-theme-set]');
   if (themeSet) {
     setThemeUser(themeSet.dataset.themeSet);
+    renderChrome();
     renderPage();
     toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[themeSet.dataset.themeSet] || ''));
     return;
   }
 
   if (ev.target.closest('#toggle-theme')) {
-    const order = { system: 'dark', dark: 'light', light: 'system' };
-    setThemeUser(order[state.themeUser] || 'system');
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    setThemeUser(next);
+    renderChrome();
     renderPage();
-    toast('外观：' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[state.themeUser] || ''));
+    toast('外观：' + (next === 'dark' ? '深色' : '亮色'));
     return;
   }
 
@@ -2158,10 +2163,12 @@ function runPaletteItem(item) {
   closePalette();
   if (item.route) { setRoute(item.route); renderAll(); workspaceEl.scrollTop = 0; }
   else if (item.action === 'theme') {
-    const order = { system: 'dark', dark: 'light', light: 'system' };
-    setThemeUser(order[state.themeUser] || 'system');
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    setThemeUser(next);
+    renderChrome();
     renderPage();
-    toast('外观：' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[state.themeUser] || ''));
+    toast('外观：' + (next === 'dark' ? '深色' : '亮色'));
   } else if (item.id) {
     const full = safeReadProject(item.id);
     if (full) {
