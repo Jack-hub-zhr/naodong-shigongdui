@@ -494,7 +494,7 @@ export function agentAction(p, key, st) {
     reviewer: {
       reviewing: '逐条跑 12 项检查，只列必改项',
       done: p.report?.passed ? '交给统筹者：12 项全通过' : `交给统筹者：${p.report?.findings?.filter((f) => !f.passed).length || 0} 项未通过`,
-      standby: '等产物，预载 12 项检查',
+      standby: '等产物，产物到了逐项检查',
     },
     pleaser: {
       working: '收字号、收颜色、补一次得分动效',
