@@ -2151,3 +2151,6 @@ body { background: var(--canvas); font-size: 15px; }
   .search-pill { width: 38px; min-width: 0; padding: 0; justify-content: center; }
   .search-pill span, .search-pill kbd { display: none; }
 }
+@media (max-width: 760px) {
+  .crumbs .crumb-link, .crumbs .sep { display: none; }
+}
