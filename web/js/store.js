@@ -463,7 +463,7 @@ export function agentAction(p, key, st) {
       orch: '等待新项目',
       product: '等统筹者派工',
       builder: '等策划者写规格',
-      reviewer: '等产物，预载 12 项检查',
+      reviewer: '等产物，产物到了逐项检查',
       pleaser: '交付后做最后一公里打磨',
     }[key] || '待命';
   }
@@ -543,7 +543,7 @@ export function stateLabel(s, key) {
     case 'blocked': return '需要你';
     case 'done': return '已完成';
     case 'paused': return '稍后继续';
-    case 'standby': return key === 'reviewer' ? '排队中' : '待命';
+    case 'standby': return '待命';
     default: return '待命';
   }
 }
