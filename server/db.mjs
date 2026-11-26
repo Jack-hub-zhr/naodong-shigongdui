@@ -14,7 +14,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_STATE_BYTES = 3 * 1024 * 1024;
 
 // 每次发布改动递增 ACCOUNT_EPOCH，启动时清理旧用户。Jack 的账号、项目和会话永远保留。
-const ACCOUNT_EPOCH = (process.env.RENDER_GIT_COMMIT || '20261126h').slice(0, 12);
+const ACCOUNT_EPOCH = (process.env.RENDER_GIT_COMMIT || '20261126i').slice(0, 12);
 const db = { users: [], sessions: [], states: {}, meta: {} };
 let writeQueue = Promise.resolve();
 
@@ -51,8 +51,32 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function validUsername(value) {
+  return /^[\w\u4e00-\u9fa5.-]{2,24}$/.test(String(value || '').trim());
+}
+
 function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt };
+  return { id: user.id, email: user.email, name: user.name, username: user.username || user.name, createdAt: user.createdAt };
+}
+
+function usernameTaken(candidate, exceptId) {
+  const key = normalizeUsername(candidate);
+  return db.users.some((u) => u.id !== exceptId
+    && (normalizeUsername(u.username) === key || normalizeUsername(u.name) === key));
+}
+
+function uniqueUsername(base, exceptId) {
+  let candidate = normalizeUsername(base) || 'user';
+  let n = 2;
+  while (usernameTaken(candidate, exceptId)) {
+    candidate = `${normalizeUsername(base) || 'user'}${n}`;
+    n += 1;
+  }
+  return candidate;
 }
 
 function cleanupSessions() {
@@ -64,16 +88,51 @@ function cleanupSessions() {
   }
 }
 
-function jackIds() {
+function findOwner() {
   const byId = String(process.env.JACK_USER_ID || '').trim();
   const byEmail = normalizeEmail(process.env.JACK_EMAIL || '');
-  const explicit = db.users.filter((u) => (byId && u.id === byId) || (byEmail && u.email === byEmail));
-  if (explicit.length) return new Set(explicit.map((u) => u.id));
-  const hinted = db.users.filter((u) => /jack|曾浩然|zhr/i.test(`${u.name || ''} ${u.email || ''}`));
-  if (hinted.length) return new Set(hinted.map((u) => u.id));
+  const byUsername = normalizeUsername(process.env.JACK_USERNAME || '');
+  const explicit = db.users.filter((u) => (byId && u.id === byId)
+    || (byEmail && u.email === byEmail)
+    || (byUsername && (normalizeUsername(u.username) === byUsername || normalizeUsername(u.name) === byUsername)));
+  if (explicit.length) return explicit[0];
+  const hinted = db.users.filter((u) => /jack|曾浩然|zhr/i.test(`${u.name || ''} ${u.username || ''} ${u.email || ''}`));
+  if (hinted.length) return hinted[0];
   // 只有一个账号时它必然是站主本人；多账号且无法识别 Jack 时宁可不清理，也不冒险删错。
-  if (db.users.length === 1) return new Set([db.users[0].id]);
-  return new Set();
+  if (db.users.length === 1) return db.users[0];
+  return null;
+}
+
+function jackIds() {
+  const owner = findOwner();
+  return owner ? new Set([owner.id]) : new Set();
+}
+
+async function normalizeAccounts() {
+  const used = new Set();
+  let changed = false;
+  for (const user of db.users) {
+    const base = normalizeUsername(user.username || user.name || String(user.email || '').split('@')[0]);
+    let candidate = base && validUsername(base) ? base : 'user';
+    let n = 2;
+    while (used.has(candidate)) { candidate = `${base || 'user'}${n}`; n += 1; }
+    if (user.username !== candidate) { user.username = candidate; changed = true; }
+    used.add(candidate);
+  }
+
+  const owner = findOwner();
+  if (owner) {
+    const email = normalizeEmail(process.env.JACK_EMAIL || '');
+    const name = String(process.env.JACK_NAME || '').trim();
+    const username = normalizeUsername(process.env.JACK_USERNAME || '');
+    if (email && owner.email !== email) { owner.email = email; changed = true; }
+    if (name && owner.name !== name) { owner.name = name; changed = true; }
+    if (username && owner.username !== username) {
+      owner.username = uniqueUsername(username, owner.id);
+      changed = true;
+    }
+  }
+  if (changed) await persist();
 }
 
 async function resetAccountsForEpoch() {
@@ -115,6 +174,7 @@ function seedOwnerFromEnv() {
 export async function initAccounts() {
   load();
   seedOwnerFromEnv();
+  await normalizeAccounts();
   await resetAccountsForEpoch();
   cleanupSessions();
   return { file: DATA_FILE, users: db.users.length };
@@ -134,20 +194,23 @@ async function hashPassword(password, salt) {
   return derived.toString('hex');
 }
 
-export async function register({ email, name, password }) {
+export async function register({ email, name, username, password }) {
   const normalized = normalizeEmail(email);
-  const displayName = String(name || '').trim();
+  const displayName = String(username || name || '').trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.length > 120) {
     throw Object.assign(new Error('请输入有效邮箱'), { status: 400, code: 'INVALID_EMAIL' });
   }
-  if (displayName.length < 1 || displayName.length > 24) {
-    throw Object.assign(new Error('昵称需为 1–24 个字符'), { status: 400, code: 'INVALID_NAME' });
+  if (!validUsername(displayName)) {
+    throw Object.assign(new Error('用户名需为 2–24 个字符，可用中英文、数字、_ . -'), { status: 400, code: 'INVALID_USERNAME' });
   }
   if (String(password || '').length < 8 || String(password).length > 128) {
     throw Object.assign(new Error('密码至少 8 位'), { status: 400, code: 'INVALID_PASSWORD' });
   }
   if (db.users.some((u) => u.email === normalized)) {
     throw Object.assign(new Error('这个邮箱已经注册，直接登录即可'), { status: 409, code: 'EMAIL_TAKEN' });
+  }
+  if (usernameTaken(displayName)) {
+    throw Object.assign(new Error('这个用户名已经被使用'), { status: 409, code: 'USERNAME_TAKEN' });
   }
 
   const salt = randomBytes(16).toString('hex');
@@ -160,6 +223,7 @@ export async function register({ email, name, password }) {
     id: `u_${randomUUID()}`,
     email: normalized,
     name: displayName,
+    username: normalizeUsername(displayName),
     salt,
     hash,
     createdAt: Date.now(),
@@ -170,10 +234,14 @@ export async function register({ email, name, password }) {
   return { user: publicUser(user), token: session.token, expiresAt: session.expiresAt };
 }
 
-export async function login({ email, password }) {
-  const normalized = normalizeEmail(email);
-  const user = db.users.find((u) => u.email === normalized);
-  const generic = Object.assign(new Error('邮箱或密码不正确'), { status: 401, code: 'BAD_CREDENTIALS' });
+export async function login({ username, email, password }) {
+  const handle = String(username || '').trim();
+  const normalizedEmail = normalizeEmail(email || (handle.includes('@') ? handle : ''));
+  const normalizedName = normalizeUsername(handle);
+  const user = db.users.find((u) => normalizedName
+    && (normalizeUsername(u.username) === normalizedName || normalizeUsername(u.name) === normalizedName))
+    || (normalizedEmail && db.users.find((u) => u.email === normalizedEmail));
+  const generic = Object.assign(new Error('用户名或密码不正确'), { status: 401, code: 'BAD_CREDENTIALS' });
   if (!user) throw generic;
 
   const hash = await hashPassword(String(password || ''), user.salt);

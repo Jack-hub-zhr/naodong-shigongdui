@@ -16,6 +16,7 @@ import {
 } from './api.js';
 import { advance, resumeFromPause, inspect, applyBaseStyle } from './pipeline.js';
 
+const appEl = document.getElementById('app');
 const railEl = document.getElementById('rail');
 const topbarEl = document.getElementById('topbar');
 const pageEl = document.getElementById('page');
@@ -43,6 +44,24 @@ const ui = {
 };
 
 let lastRenderedRoute = null;
+let layoutAnimTimer = 0;
+
+function syncLayoutButton(which, open) {
+  const btn = document.getElementById(which === 'rail' ? 'toggle-rail' : 'toggle-crew');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(open));
+  btn.setAttribute('aria-label', `${open ? '收起' : '展开'}${which === 'rail' ? '导航' : '团队台'}`);
+}
+
+function toggleLayout(which) {
+  const openClass = `${which}-open`;
+  const next = !appEl.classList.contains(openClass);
+  appEl.classList.toggle(openClass, next);
+  appEl.classList.toggle(`${which}-collapsed`, !next);
+  syncLayoutButton(which, next);
+  clearTimeout(layoutAnimTimer);
+  layoutAnimTimer = setTimeout(() => { workspaceEl.scrollTop = workspaceEl.scrollTop; }, 470);
+}
 let pageAnimTimer = 0;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -246,7 +265,12 @@ function renderTopbar() {
   const themeLabel = { light: '切换为深色', dark: '切换为着色', tinted: '切换为亮色' }[theme] || '切换外观';
   const themeIcon = theme === 'light' ? ICONS.moon : theme === 'dark' ? ICONS.tint : ICONS.sun;
   const alert = p && p.status === 'AWAITING_USER';
+  const railOpen = appEl.classList.contains('rail-open');
+  const crewOpen = appEl.classList.contains('crew-open');
   topbarEl.innerHTML = `
+    <button class="layout-toggle" id="toggle-rail" type="button" aria-pressed="${railOpen}" aria-label="${railOpen ? '收起导航' : '展开导航'}">
+      ${ICONS.panelLeft}<span>导航</span>
+    </button>
     <div class="crumbs">${crumbsHtml()}</div>
     <div class="topbar-actions">
       <button class="search-pill" id="open-palette" type="button" aria-label="搜索与命令">
@@ -262,7 +286,10 @@ function renderTopbar() {
       </button>
       <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录以同步项目'}">
         <span class="avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
-        <span class="account-name">${state.user ? esc(state.user.name || state.user.email.split('@')[0]) : '同步'}</span>
+        <span class="account-name">${state.user ? esc(state.user.name || state.user.username || state.user.email.split('@')[0]) : '同步'}</span>
+      </button>
+      <button class="layout-toggle" id="toggle-crew" type="button" aria-pressed="${crewOpen}" aria-label="${crewOpen ? '收起团队台' : '展开团队台'}">
+        ${ICONS.panelRight}<span>团队</span>
       </button>
     </div>`;
 }
@@ -1325,7 +1352,7 @@ function profileHtml() {
 
       <div class="panel">
         <h3>外观</h3>
-        <div class="desc">跟随系统，或固定使用亮色、深色、着色。</div>
+        <div class="desc">跟随系统或固定亮色、深色、着色。</div>
         <div class="seg-full" role="group" aria-label="外观">
           ${[['system', '跟随系统'], ['light', '亮色'], ['dark', '深色'], ['tinted', '着色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
         </div>
@@ -1343,7 +1370,7 @@ function profileHtml() {
 
       <div class="panel">
         <h3>制作服务连接</h3>
-        <div class="desc">公共链自动调度；填入自己的 Key 后可优先走你的 Qwen 服务。</div>
+        <div class="desc">自动选择可用通道；填入自己的 Key 后优先走你的服务。</div>
         <div class="channel-row">
           <span class="dot ${hb.tone === 'fail' ? 'err' : hb.tone === 'wait' ? 'wait' : 'ok'}"></span>
           <div class="txt"><b>${COPY.channel}</b><span>${esc(hb.text)}</span></div>
@@ -1357,8 +1384,8 @@ function profileHtml() {
         </div>
         <div class="channel-foot">
           ${reason ? `上次暂停原因：${esc(reason.long)} · ${next}<br>` : ''}
-          今日调用 ${callsToday()} 次 · 单服务串行，同一时间只接一个想法<br>
-          <span style="color:var(--text-3)">07:00–23:59 每 15 分钟只保 API，冷启动通常 < 30 秒。</span>
+          今日调用 ${callsToday()} 次 · 同一时间只接一个想法<br>
+          <span style="color:var(--text-3)">07:00–23:59 每 15 分钟保活，冷启动通常 < 30 秒。</span>
         </div>
       </div>
       ${qwenProviderHtml()}
@@ -1368,11 +1395,11 @@ function profileHtml() {
       <div class="panel">
         <div class="section-head" style="margin-bottom:10px"><h3>历史想法</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
         <div class="history-tabs segmented" role="tablist">
-          ${['全部', '进行中', '需要你确认', '已交付', '稍后继续'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
+          ${['全部', '进行中', '已交付'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
         </div>
         ${historyRowsHtml()}
         <div class="danger-zone">
-          <span class="txt">清空本地数据会删除所有想法、日志与成品，无法恢复。</span>
+          <span class="txt">清空想法、日志与成品，无法恢复。</span>
           <span class="side"><button class="btn small ghost-danger" id="clear-start" type="button">清空数据</button></span>
         </div>
         <div id="clear-confirm-wrap"></div>
@@ -1665,6 +1692,8 @@ document.addEventListener('click', (ev) => {
     if (isMobile()) openCrewSheet(); else openDrawer();
     return;
   }
+  if (ev.target.closest('#toggle-rail')) { toggleLayout('rail'); return; }
+  if (ev.target.closest('#toggle-crew')) { toggleLayout('crew'); return; }
   if (ev.target.closest('#toggle-follow') || ev.target.closest('[data-toggle-follow]')) {
     state.autofollow = !state.autofollow;
     try { localStorage.setItem('fc-autofollow', JSON.stringify(state.autofollow)); } catch (e) {}
@@ -2258,20 +2287,20 @@ function authModalHtml() {
     <div class="eyebrow">ACCOUNT · 可选</div>
     <h2 id="auth-title">${register ? '创建同步账号' : '登录以同步项目'}</h2>
     <p class="auth-lead">${register
-      ? '账号只用来跨设备同步项目。不注册也能继续用，数据留在这台浏览器。'
-      : '登录只用来把项目同步到其他设备。不登录也能直接用，数据留在这台浏览器。'}</p>
+      ? '创建账号后，项目会跟着用户名同步到其他设备。'
+      : '输入用户名和密码即可继续，项目会同步到其他设备。'}</p>
     <div class="auth-tabs segmented" role="tablist">
       <button type="button" data-auth-tab="login" aria-selected="${!register}">登录</button>
       <button type="button" data-auth-tab="register" aria-selected="${register}">注册</button>
     </div>
     <form id="auth-form" autocomplete="on" novalidate>
+      <label class="auth-field"><span>用户名</span>
+        <input name="username" type="text" maxlength="24" placeholder="${register ? '2–24 个字符，例如 Jack' : '输入用户名'}" autocomplete="username" required>
+      </label>
       ${register ? `
-      <label class="auth-field"><span>昵称</span>
-        <input name="name" type="text" maxlength="24" placeholder="团队里怎么称呼你" autocomplete="nickname" required>
-      </label>` : ''}
       <label class="auth-field"><span>邮箱</span>
         <input name="email" type="email" maxlength="120" placeholder="you@example.com" autocomplete="email" required>
-      </label>
+      </label>` : ''}
       <label class="auth-field"><span>密码</span>
         <input name="password" type="password" minlength="8" maxlength="128" placeholder="${register ? '至少 8 位' : '输入密码'}" autocomplete="${register ? 'new-password' : 'current-password'}" required>
       </label>
@@ -2297,7 +2326,7 @@ function openAuth(mode = 'login') {
   wrap.innerHTML = authModalHtml();
   overlayRoot.appendChild(wrap);
   requestAnimationFrame(() => {
-    const input = wrap.querySelector('input[name="email"]');
+    const input = wrap.querySelector('input[name="username"]');
     if (input) input.focus({ preventScroll: true });
   });
 }
@@ -2310,7 +2339,7 @@ function rerenderAuth() {
   const wrap = overlayRoot.querySelector('.auth-root');
   if (!wrap) return;
   wrap.innerHTML = authModalHtml();
-  const input = wrap.querySelector('input[name="email"]');
+  const input = wrap.querySelector('input[name="username"]');
   if (input) input.focus({ preventScroll: true });
 }
 
@@ -2336,16 +2365,16 @@ async function hydrateAfterLogin() {
 async function submitAuth(form) {
   const errorEl = form.querySelector('#auth-error');
   const data = new FormData(form);
+  const username = String(data.get('username') || '').trim();
   const email = String(data.get('email') || '').trim();
   const password = String(data.get('password') || '');
-  const name = String(data.get('name') || '').trim();
 
-  if (!email || !password) {
-    if (errorEl) errorEl.textContent = '请填写邮箱和密码';
+  if (!username || !password) {
+    if (errorEl) errorEl.textContent = '请填写用户名和密码';
     return;
   }
-  if (ui.authMode === 'register' && (!name || password.length < 8)) {
-    if (errorEl) errorEl.textContent = '昵称不能为空，密码至少 8 位';
+  if (ui.authMode === 'register' && (!email || password.length < 8)) {
+    if (errorEl) errorEl.textContent = '注册需要邮箱，密码至少 8 位';
     return;
   }
 
@@ -2356,8 +2385,8 @@ async function submitAuth(form) {
 
   try {
     const user = ui.authMode === 'register'
-      ? await registerAccount({ email, name, password })
-      : await loginAccount({ email, password });
+      ? await registerAccount({ username, name: username, email, password })
+      : await loginAccount({ username, password });
     state.user = user;
     closeAuth(true);
     await hydrateAfterLogin();
@@ -2370,10 +2399,9 @@ async function submitAuth(form) {
     const freshForm = document.querySelector('#auth-form');
     if (freshError) freshError.textContent = error?.message || '登录失败，请稍后重试';
     if (freshForm) {
-      freshForm.querySelector('input[name="email"]').value = email;
-      if (freshForm.querySelector('input[name="name"]')) {
-        freshForm.querySelector('input[name="name"]').value = name;
-      }
+      freshForm.querySelector('input[name="username"]').value = username;
+      const emailInput = freshForm.querySelector('input[name="email"]');
+      if (emailInput) emailInput.value = email;
     }
   }
 }
