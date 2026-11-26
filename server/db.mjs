@@ -14,7 +14,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_STATE_BYTES = 3 * 1024 * 1024;
 
 // 每次发布改动递增 ACCOUNT_EPOCH，启动时清理旧用户。Jack 的账号、项目和会话永远保留。
-const ACCOUNT_EPOCH = '20261126h';
+const ACCOUNT_EPOCH = (process.env.RENDER_GIT_COMMIT || '20261126h').slice(0, 12);
 const db = { users: [], sessions: [], states: {}, meta: {} };
 let writeQueue = Promise.resolve();
 
