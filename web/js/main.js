@@ -297,8 +297,7 @@ function renderTopbar() {
 function renderTabbar() {
   const p = state.project;
   const items = [
-    { key: 'projects', route: 'idea', icon: 'idea', label: '项目' },
-    { key: 'new', new: true, icon: 'idea', label: '新建' },
+    { key: 'projects', route: 'idea', icon: 'newProject', label: COPY.nav.idea },
     { key: 'profile', route: 'profile', icon: 'profile', label: '我的' },
   ];
   tabbarEl.innerHTML = items.map((item) => {
