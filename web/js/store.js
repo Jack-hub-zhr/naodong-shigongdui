@@ -230,7 +230,7 @@ function compactProjects(list) {
 export function loadTheme() {
   try {
     const user = localStorage.getItem(KEYS.themeUser) || 'system';
-    state.themeUser = ['system', 'dark', 'light'].includes(user) ? user : 'system';
+    state.themeUser = ['system', 'dark', 'light', 'tinted'].includes(user) ? user : 'system';
   } catch (e) {
     state.themeUser = 'dark';
   }
@@ -245,7 +245,7 @@ export function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme);
   document.documentElement.setAttribute('data-theme-user', state.themeUser);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#F5F4F0' : '#0A0A0B');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#F2F2F7' : theme === 'tinted' ? '#1A140A' : '#000000');
   try { localStorage.setItem(KEYS.themeUser, state.themeUser); } catch (e) {}
   document.dispatchEvent(new CustomEvent('fc:theme', { detail: { theme, user: state.themeUser } }));
 }

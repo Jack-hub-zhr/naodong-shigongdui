@@ -1,7 +1,7 @@
 // app entry: routing, views, crew panel, sheet, command palette
 
 import {
-  BRAND, COPY, ICONS, LOGO_SVG, ROLES, TAGS, RECIPES, API, STYLES,
+  BRAND, COPY, ICONS, LOGO_SVG, ROLES, ROLE_ICONS, TAGS, RECIPES, API, STYLES,
 } from './config.js';
 import {
   state, KEYS, STAGES, STATUS, loadTheme, loadState, saveNow, scheduleSave,
@@ -220,8 +220,9 @@ function crumbsHtml() {
 function renderTopbar() {
   const p = state.project;
   const agents = deriveAgents(p);
-  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
-  const themeLabel = dark ? '切换为亮色' : '切换为深色';
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const themeLabel = { light: '切换为深色', dark: '切换为着色', tinted: '切换为亮色' }[theme] || '切换外观';
+  const themeIcon = theme === 'light' ? ICONS.moon : theme === 'dark' ? ICONS.tint : ICONS.sun;
   const alert = p && p.status === 'AWAITING_USER';
   topbarEl.innerHTML = `
     <div class="crumbs">${crumbsHtml()}</div>
@@ -235,7 +236,7 @@ function renderTopbar() {
       </button>
       <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">${ICONS.info}</button>
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="${themeLabel}" title="${themeLabel}">
-        ${dark ? ICONS.sun : ICONS.moon}
+        ${themeIcon}
       </button>
       <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录以同步项目'}">
         <span class="avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
@@ -268,10 +269,10 @@ function agentCard(a, opts = {}) {
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
   const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
-  return `<button class="agent-card ${opts.mini ? 'mini' : ''}" data-agent="${a.key}" type="button"
+  return `<button class="agent-card ${opts.mini ? 'mini' : ''} ${opts.focus ? 'focus' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">
-      <div class="agent-avatar ${avatarClass}">${a.letter}</div>
+      <div class="agent-avatar ${avatarClass}">${ROLE_ICONS[a.key] || a.letter}</div>
       <div class="agent-id"><b>${a.name}<em>${a.role}</em></b></div>
       <div class="state">${statePill}</div>
     </div>
@@ -292,6 +293,11 @@ function crewBodyHtml(p, { mini = false } = {}) {
   const agents = deriveAgents(p);
   const prog = stageProgress(p);
   const nowStage = STAGES[prog.index] || STAGES[0];
+  const focusKey = (agents.find((a) => a.state === 'blocked')
+    || agents.find((a) => a.state === 'reviewing')
+    || agents.find((a) => a.state === 'working')
+    || agents.find((a) => a.state === 'thinking')
+    || agents[0])?.key;
   return `
     <div class="crew-task">
       <div class="row"><span>当前任务</span><span class="r">${roundLabel(p)}</span></div>
@@ -299,12 +305,12 @@ function crewBodyHtml(p, { mini = false } = {}) {
       <div class="stage-row"><span>现在 · ${nowStage.name}</span><span>${prog.done} / ${prog.total} 阶段完成</span></div>
       <div class="stage-dots">${STAGES.map((st, i) => `<span class="${i < prog.done ? 'done' : i === prog.index ? 'active' : ''}">${st.no}</span>`).join('')}</div>
     </div>
-    ${agents.map((a) => agentCard(a, { mini })).join('')}`;
+    <div class="agent-grid">${agents.map((a) => agentCard(a, { mini, focus: a.key === focusKey })).join('')}</div>`;
 }
 
 function dummyCards(agents, mini) {
   return `<div class="crew-empty">团队待命中。<br>写一句想法，5 名成员会立刻进场。</div>`
-    + agents.map((a) => agentCard(a, { mini })).join('');
+    + `<div class="agent-grid">${agents.map((a, i) => agentCard(a, { mini, focus: i === 0 })).join('')}</div>`;
 }
 
 function renderCrew() {
@@ -441,7 +447,7 @@ function ideaHtml() {
         </div>
       </div>
       <div class="flow-strip">
-        <div class="flow-avatars">${agents.map((a) => `<span>${a.letter}</span>`).join('')}</div>
+        <div class="flow-avatars">${agents.map((a) => `<span>${ROLE_ICONS[a.key] || a.letter}</span>`).join('')}</div>
         <div class="txt">统筹者拆解 · 策划者定标准 · 编程者制作 · 检查者检查 · 打磨者打磨。服务${online ? '在线' : '连接中'}。</div>
       </div>
     </div>
@@ -531,7 +537,7 @@ function statusTableHtml(p) {
       <thead><tr><th role="columnheader">成员</th><th>现在在做什么</th><th>产出去向</th><th>本次用时</th><th>状态</th></tr></thead>
       <tbody>
         ${agents.map((a) => `<tr>
-          <td class="who"><span class="mini-avatar">${a.letter}</span><span>${a.name}<span class="sub">${a.role}</span></span></td>
+          <td class="who"><span class="mini-avatar">${ROLE_ICONS[a.key] || a.letter}</span><span>${a.name}<span class="sub">${a.role}</span></span></td>
           <td>${esc(a.action)}</td>
           <td>${esc(a.handoff || '—')}</td>
           <td class="mono">${fmtElapsed(a.elapsedMs)}</td>
@@ -728,7 +734,7 @@ function chatMessageHtml(m) {
     ? '<button class="btn small chat-rebuild" type="button" data-chat-rebuild>按新要求再做一版</button>'
     : '';
   return `<div class="chat-msg ${me ? 'me' : ''}">
-    <span class="chat-avatar">${esc(role.letter)}</span>
+    <span class="chat-avatar">${ROLE_ICONS[role.key] || esc(role.letter)}</span>
     <div class="chat-bubble"><b>${esc(role.name)}</b><p>${esc(m.text)}</p>${tag}${rebuild}</div>
   </div>`;
 }
@@ -1288,9 +1294,9 @@ function profileHtml() {
 
       <div class="panel">
         <h3>外观</h3>
-        <div class="desc">跟随系统，或固定使用深色、亮色。</div>
+        <div class="desc">跟随系统，或固定使用亮色、深色、着色。</div>
         <div class="seg-full" role="group" aria-label="外观">
-          ${[['system', '跟随系统'], ['dark', '深色'], ['light', '亮色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
+          ${[['system', '跟随系统'], ['light', '亮色'], ['dark', '深色'], ['tinted', '着色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
         </div>
         <div class="panel-sect">
           <div class="setting-row">
@@ -1347,7 +1353,7 @@ function profileHtml() {
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
         <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
-        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 双主题 · 石墨 / 纸白 · 单一暖色强调</span></div>
+        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 三态 · 石墨 / 纸白 / 着色 · 单一暖色强调</span></div>
         <div class="about-row"><span>生成服务</span><span class="side">自动选择可用连接 · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
     </div>
@@ -1589,17 +1595,17 @@ document.addEventListener('click', (ev) => {
     setThemeUser(themeSet.dataset.themeSet);
     renderChrome();
     renderPage();
-    toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[themeSet.dataset.themeSet] || ''));
+    toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色', tinted: '着色' }[themeSet.dataset.themeSet] || ''));
     return;
   }
 
   if (ev.target.closest('#toggle-theme')) {
     const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
+    const next = current === 'light' ? 'dark' : current === 'dark' ? 'tinted' : 'light';
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + (next === 'dark' ? '深色' : '亮色'));
+    toast('外观：' + ({ light: '亮色', dark: '深色', tinted: '着色' }[next] || next));
     return;
   }
 
@@ -2154,11 +2160,11 @@ function runPaletteItem(item) {
   if (item.route) { setRoute(item.route); renderAll(); workspaceEl.scrollTop = 0; }
   else if (item.action === 'theme') {
     const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
+    const next = current === 'light' ? 'dark' : current === 'dark' ? 'tinted' : 'light';
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + (next === 'dark' ? '深色' : '亮色'));
+    toast('外观：' + ({ light: '亮色', dark: '深色', tinted: '着色' }[next] || next));
   } else if (item.id) {
     const full = safeReadProject(item.id);
     if (full) {
