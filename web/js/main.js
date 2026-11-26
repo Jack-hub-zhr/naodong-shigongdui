@@ -42,6 +42,9 @@ const ui = {
   authBusy: false,
 };
 
+let lastRenderedRoute = null;
+let pageAnimTimer = 0;
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
@@ -49,6 +52,28 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
 setCloudSaver(saveCloudState);
 
 const tagLabel = (k) => (TAGS.find((t) => t.key === k)?.label || k || '未分类');
+const PRESSABLE = '.btn, .icon-btn, .search-pill, .account-btn, .nav-item, .tabbar button, .chip, .recipe, .agent-card, .option, .recent-row, .sheet-close';
+let pressedEl = null;
+function clearPress() {
+  if (pressedEl) pressedEl.classList.remove('is-pressed');
+  pressedEl = null;
+}
+document.addEventListener('pointerdown', (ev) => {
+  if (ev.button !== 0) return;
+  const el = ev.target.closest(PRESSABLE);
+  if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+  clearPress();
+  pressedEl = el;
+  el.classList.add('is-pressed');
+}, { passive: true });
+window.addEventListener('pointerup', clearPress, { passive: true });
+window.addEventListener('pointercancel', clearPress, { passive: true });
+window.addEventListener('blur', clearPress);
+document.addEventListener('pointerout', (ev) => {
+  if (!pressedEl || !pressedEl.contains(ev.target) || pressedEl.contains(ev.relatedTarget)) return;
+  clearPress();
+}, { passive: true });
+
 
 const ROLE_DOT = {
   ORCHESTRATOR: 'run',
@@ -337,6 +362,8 @@ function renderPage() {
   const active = document.activeElement;
   const focusId = active && active.id ? active.id : null;
   const selStart = active && 'selectionStart' in active ? active.selectionStart : null;
+  const entering = lastRenderedRoute !== state.route;
+  lastRenderedRoute = state.route;
 
   const scrollTop = workspaceEl.scrollTop;
   let html = '';
@@ -345,6 +372,13 @@ function renderPage() {
   else if (state.route === 'review') html = buildHtml();
   else html = profileHtml();
   pageEl.innerHTML = html;
+  if (entering) {
+    pageEl.classList.remove('page-enter');
+    void pageEl.offsetWidth;
+    pageEl.classList.add('page-enter');
+    clearTimeout(pageAnimTimer);
+    pageAnimTimer = setTimeout(() => pageEl.classList.remove('page-enter'), 650);
+  }
   workspaceEl.scrollTop = scrollTop;
 
   bindPageEvents();
@@ -1353,7 +1387,7 @@ function profileHtml() {
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
         <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
-        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 三态 · 石墨 / 纸白 / 着色 · 单一暖色强调</span></div>
+        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v3</span> 三态 · 石墨 / 纸白 / 着色 · iOS 26 手感</span></div>
         <div class="about-row"><span>生成服务</span><span class="side">自动选择可用连接 · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
     </div>
@@ -2000,6 +2034,7 @@ function openCrewSheet() {
   sheet.setAttribute('aria-label', '团队状态台');
   sheet.innerHTML = sheetHtml();
   overlayRoot.append(scrim, sheet);
+  requestAnimationFrame(() => { sheet.classList.add('open'); scrim.classList.add('open'); });
   ui.sheet = { scrim, sheet, opener: document.activeElement };
   const close = () => closeCrewSheet();
   scrim.addEventListener('click', close);
@@ -2013,22 +2048,52 @@ function openCrewSheet() {
     }
     if (ev.target.closest('[data-nav]')) { close(); }
   });
-  // drag to close
-  let startY = null;
-  const body = sheet.querySelector('.sheet-body');
-  body.addEventListener('touchstart', (e) => { startY = body.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
-  body.addEventListener('touchmove', (e) => {
-    if (startY == null) return;
-    const dy = e.touches[0].clientY - startY;
-    if (dy > 0) sheet.style.transform = `translateY(${Math.min(dy, 140)}px)`;
-  }, { passive: true });
-  body.addEventListener('touchend', (e) => {
-    if (startY == null) return;
-    const dy = e.changedTouches[0].clientY - startY;
-    if (dy > 80) close();
-    else sheet.style.transform = '';
-    startY = null;
-  });
+  // drag to close: 1:1 follow + rubber band + velocity projection
+  let drag = null;
+  const rubber = (d, dim = 480, c = .55) => (1 - 1 / (d * c / dim + 1)) * dim;
+  const settleBack = () => {
+    sheet.style.transition = 'transform var(--dur-settle) var(--spring-settle)';
+    sheet.style.transform = 'translateY(0)';
+  };
+  const endDrag = () => {
+    if (!drag) return;
+    const now = performance.now();
+    const recent = drag.samples.filter((s) => now - s.t < 100);
+    const v = recent.length > 1
+      ? (recent[recent.length - 1].y - recent[0].y) / ((now - recent[0].t) / 1000)
+      : 0;
+    const projected = drag.offset + v * 0.32;
+    drag = null;
+    if (v > 160 || projected > 240) close();
+    else settleBack();
+  };
+  const onDown = (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const tf = getComputedStyle(sheet).transform;
+    const matrix = tf && tf !== 'none' ? new DOMMatrixReadOnly(tf) : null;
+    const startOffset = Math.max(0, matrix?.m42 || 0);
+    drag = { startY: e.clientY, startOffset, offset: startOffset, samples: [{ t: performance.now(), y: e.clientY }] };
+    sheet.style.transition = 'none';
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e) => {
+    if (!drag) return;
+    const raw = Math.max(0, drag.startOffset + e.clientY - drag.startY);
+    drag.offset = raw <= 180 ? raw : 180 + rubber(raw - 180);
+    sheet.style.transform = `translateY(${drag.offset}px)`;
+    drag.samples.push({ t: performance.now(), y: e.clientY });
+    if (drag.samples.length > 12) drag.samples.shift();
+  };
+  const onUp = () => endDrag();
+  const onCancel = () => { if (drag) { drag = null; settleBack(); } };
+  [sheet.querySelector('.sheet-handle'), sheet.querySelector('.sheet-head')]
+    .filter(Boolean)
+    .forEach((grab) => {
+      grab.addEventListener('pointerdown', onDown);
+      grab.addEventListener('pointermove', onMove);
+      grab.addEventListener('pointerup', onUp);
+      grab.addEventListener('pointercancel', onCancel);
+    });
   // focus trap
   setTimeout(() => document.getElementById('close-sheet')?.focus(), 60);
 }
@@ -2038,9 +2103,11 @@ function closeCrewSheet() {
   if (!ui.sheet) return;
   const { scrim, sheet, opener } = ui.sheet;
   ui.sheet = null;
+  sheet.style.transform = '';
+  sheet.classList.remove('open');
   sheet.classList.add('closing');
   scrim.style.opacity = '0';
-  setTimeout(() => { scrim.remove(); sheet.remove(); }, 220);
+  setTimeout(() => { scrim.remove(); sheet.remove(); }, 500);
   if (opener?.focus) opener.focus({ preventScroll: true });
 }
 
@@ -2060,7 +2127,7 @@ function openDrawer() {
         <span class="side"><button class="btn" id="close-drawer" type="button">收起</button></span></div>
     </div>`;
   overlayRoot.append(scrim, drawer);
-  requestAnimationFrame(() => drawer.classList.add('open'));
+  requestAnimationFrame(() => { drawer.classList.add('open'); scrim.classList.add('open'); });
   const close = () => closeDrawer();
   scrim.addEventListener('click', close);
   drawer.querySelector('#close-drawer').addEventListener('click', close);
@@ -2081,7 +2148,7 @@ function closeDrawer() {
   if (!drawer) return;
   drawer.classList.remove('open');
   if (scrim) scrim.style.opacity = '0';
-  setTimeout(() => { drawer.remove(); if (scrim) scrim.remove(); }, 230);
+  setTimeout(() => { drawer.remove(); if (scrim) scrim.remove(); }, 500);
 }
 
 // command palette
