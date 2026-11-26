@@ -14,7 +14,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_STATE_BYTES = 3 * 1024 * 1024;
 
 // 每次发布改动递增 ACCOUNT_EPOCH，启动时清理旧用户。Jack 的账号、项目和会话永远保留。
-const ACCOUNT_EPOCH = '20261126g';
+const ACCOUNT_EPOCH = '20261126h';
 const db = { users: [], sessions: [], states: {}, meta: {} };
 let writeQueue = Promise.resolve();
 
@@ -95,8 +95,26 @@ async function resetAccountsForEpoch() {
   console.log(`[accounts] 已清理 ${removedUsers} 个非 Jack 账号，保留 ${keep.size} 个账号及其项目`);
 }
 
+function seedOwnerFromEnv() {
+  if (db.users.length) return;
+  const raw = process.env.JACK_SEED?.trim();
+  if (!raw) return;
+  try {
+    const seed = JSON.parse(raw);
+    const user = seed?.user;
+    if (!user?.id || !user?.email || !user?.salt || !user?.hash) throw new Error('JACK_SEED 账户字段不完整');
+    db.users = [user];
+    if (seed.state && typeof seed.state === 'object') db.states[user.id] = seed.state;
+    db.sessions = [];
+    console.log(`[accounts] 已从 JACK_SEED 恢复站主账号 ${user.email}`);
+  } catch (error) {
+    console.error('[accounts] JACK_SEED 恢复失败', error?.message || error);
+  }
+}
+
 export async function initAccounts() {
   load();
+  seedOwnerFromEnv();
   await resetAccountsForEpoch();
   cleanupSessions();
   return { file: DATA_FILE, users: db.users.length };
