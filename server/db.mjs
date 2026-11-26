@@ -13,7 +13,9 @@ const DATA_FILE = process.env.DATA_FILE?.trim()
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_STATE_BYTES = 3 * 1024 * 1024;
 
-const db = { users: [], sessions: [], states: {} };
+// 每次发布改动递增 ACCOUNT_EPOCH，启动时清理旧用户。Jack 的账号、项目和会话永远保留。
+const ACCOUNT_EPOCH = '20261126g';
+const db = { users: [], sessions: [], states: {}, meta: {} };
 let writeQueue = Promise.resolve();
 
 function load() {
@@ -23,6 +25,7 @@ function load() {
     db.users = Array.isArray(parsed.users) ? parsed.users : [];
     db.sessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
     db.states = parsed.states && typeof parsed.states === 'object' ? parsed.states : {};
+    db.meta = parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
   } catch (error) {
     console.error('账号数据读取失败，使用空库', error?.message || error);
   }
@@ -61,14 +64,51 @@ function cleanupSessions() {
   }
 }
 
-export function initAccounts() {
+function jackIds() {
+  const byId = String(process.env.JACK_USER_ID || '').trim();
+  const byEmail = normalizeEmail(process.env.JACK_EMAIL || '');
+  const explicit = db.users.filter((u) => (byId && u.id === byId) || (byEmail && u.email === byEmail));
+  if (explicit.length) return new Set(explicit.map((u) => u.id));
+  const hinted = db.users.filter((u) => /jack|曾浩然|zhr/i.test(`${u.name || ''} ${u.email || ''}`));
+  if (hinted.length) return new Set(hinted.map((u) => u.id));
+  // 只有一个账号时它必然是站主本人；多账号且无法识别 Jack 时宁可不清理，也不冒险删错。
+  if (db.users.length === 1) return new Set([db.users[0].id]);
+  return new Set();
+}
+
+async function resetAccountsForEpoch() {
+  if (db.meta.accountEpoch === ACCOUNT_EPOCH) return;
+  const keep = jackIds();
+  if (db.users.length > 0 && keep.size === 0) {
+    console.error('[accounts] 未识别 Jack 账号，已跳过本次清理；可设置 JACK_EMAIL 或 JACK_USER_ID');
+    return;
+  }
+  const removedUsers = db.users.filter((u) => !keep.has(u.id)).length;
+  db.users = db.users.filter((u) => keep.has(u.id));
+  db.sessions = db.sessions.filter((s) => keep.has(s.userId));
+  for (const id of Object.keys(db.states)) {
+    if (!keep.has(id)) delete db.states[id];
+  }
+  db.meta.accountEpoch = ACCOUNT_EPOCH;
+  db.meta.lastResetAt = Date.now();
+  await persist();
+  console.log(`[accounts] 已清理 ${removedUsers} 个非 Jack 账号，保留 ${keep.size} 个账号及其项目`);
+}
+
+export async function initAccounts() {
   load();
+  await resetAccountsForEpoch();
   cleanupSessions();
   return { file: DATA_FILE, users: db.users.length };
 }
 
 export function accountsInfo() {
-  return { users: db.users.length, persistent: Boolean(process.env.DATA_FILE) };
+  return {
+    users: db.users.length,
+    persistent: Boolean(process.env.DATA_FILE),
+    epoch: ACCOUNT_EPOCH,
+    lastResetAt: db.meta.lastResetAt || null,
+  };
 }
 
 async function hashPassword(password, salt) {

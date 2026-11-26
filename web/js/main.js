@@ -218,11 +218,8 @@ function renderRail() {
     </div>
     <div class="rail-label">工作台</div>
     <div class="nav">
-      <button class="nav-item ${state.route === 'idea' ? 'active' : ''}" data-nav="idea" type="button" aria-current="${state.route === 'idea' ? 'page' : 'false'}">
-        ${ICONS.idea}<span>项目</span>${state.projects.length ? `<span class="count">${state.projects.length}</span>` : ''}
-      </button>
-      <button class="nav-item" data-new="1" type="button">
-        <span class="plus">＋</span><span>新建</span>
+      <button class="nav-item ${state.route === 'idea' ? 'active' : ''}" data-new="1" type="button" aria-label="${COPY.nav.idea}" aria-current="${state.route === 'idea' ? 'page' : 'false'}">
+        ${ICONS.newProject}<span>${COPY.nav.idea}</span>${state.projects.length ? `<span class="count">${state.projects.length}</span>` : ''}
       </button>
       <button class="nav-item ${state.route === 'profile' ? 'active' : ''}" data-nav="profile" type="button" aria-current="${state.route === 'profile' ? 'page' : 'false'}">
         ${ICONS.profile}<span>我的</span>
@@ -239,7 +236,7 @@ function crumbsHtml() {
   if ((state.route === 'build' || state.route === 'review') && p) {
     return `<button class="crumb-link" data-nav="idea" type="button">项目</button><span class="sep">/</span><span class="current">${esc(p.title)}</span>`;
   }
-  return `<button class="crumb-link" data-nav="idea" type="button">项目</button><span class="sep">/</span><span class="current">${state.route === 'profile' ? '我的' : '新建'}</span>`;
+  return `<button class="crumb-link" data-nav="idea" type="button">项目</button><span class="sep">/</span><span class="current">${state.route === 'profile' ? '我的' : COPY.nav.idea}</span>`;
 }
 
 function renderTopbar() {

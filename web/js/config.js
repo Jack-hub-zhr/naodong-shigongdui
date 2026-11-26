@@ -15,6 +15,7 @@ export const LOGO_SVG = `
 
 export const ICONS = {
   idea: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.4 10.9c.5.4.9 1 .9 1.6V16h5v-.5c0-.6.4-1.2.9-1.6A6 6 0 0 0 12 3Z"/></svg>',
+  newProject: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.8 18h6"/><path d="M9.8 21h4"/><path d="M11.8 3a5.8 5.8 0 0 0-3.3 10.5c.5.4.8 1 .8 1.6V16h5v-.9c0-.6.3-1.2.8-1.6A5.8 5.8 0 0 0 11.8 3Z"/><path d="M20.2 2.8v5.4M17.5 5.5h5.4" stroke-width="2"/></svg>',
   build: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M6 21V9l6-4 6 4v12"/><path d="M10 21v-6h4v6"/></svg>',
   review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 12 2.5 2.5L16 9"/></svg>',
   profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/></svg>',
@@ -89,8 +90,8 @@ export const RECIPES = [
 ];
 
 export const COPY = {
-  nav: { idea: '项目', build: '项目', review: '项目', profile: '我的' },
-  navHint: { idea: '项目列表与新建', build: '当前项目', review: '需要你确认', profile: '设置与记录' },
+  nav: { idea: '新建项目', build: '项目', review: '项目', profile: '我的' },
+  navHint: { idea: '新建项目与最近记录', build: '当前项目', review: '需要你确认', profile: '设置与记录' },
   breadcrumb: '工作台',
   title: {
     idea: '说一句，五个人把它做出来',

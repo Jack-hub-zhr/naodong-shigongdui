@@ -414,7 +414,7 @@ async function handleRequest(req, res) {
   await serveStatic(req, res, pathname);
 }
 
-initAccounts();
+await initAccounts();
 const server = http.createServer((req, res) => {
   applyCors(req, res);
   handleRequest(req, res).catch((error) => {
