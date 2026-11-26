@@ -15,6 +15,14 @@ const REFERER = 'https://forgecrew-studio.onrender.com';
 // 需要 Key 的 Qwen 兼容服务。优先级：用户自带 Key > 服务端环境变量 > 公共匿名链。
 export const KEYED_PROVIDERS = [
   {
+    id: 'deepseek',
+    name: 'DeepSeek · V4.1 Flash',
+    family: 'DeepSeek V4',
+    model: 'deepseek-flash',
+    url: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/chat/completions',
+    env: 'DEEPSEEK_API_KEY',
+  },
+  {
     id: 'groq',
     name: 'Groq · Qwen3.8-27B',
     family: 'Qwen3.8',

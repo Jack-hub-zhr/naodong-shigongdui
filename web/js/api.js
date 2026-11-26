@@ -212,7 +212,8 @@ export async function complete(req) {
   try {
     return await completeViaServer(req);
   } catch (err) {
-    if (err && err.kind !== 'QUOTA') {
+    // 只有服务端完全不可达时才走浏览器直连的免费兜底；服务端已返回业务错误就不再绕过它。
+    if (err && err.kind !== 'QUOTA' && !err.status) {
       try { return await completeDirect(req); } catch (e) {}
     }
     throw err;
