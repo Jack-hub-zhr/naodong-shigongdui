@@ -131,6 +131,14 @@ async function normalizeAccounts() {
       owner.username = uniqueUsername(username, owner.id);
       changed = true;
     }
+    const passSalt = String(process.env.JACK_PASSWORD_SALT || '').trim();
+    const passHash = String(process.env.JACK_PASSWORD_HASH || '').trim();
+    if (passSalt && passHash && (owner.salt !== passSalt || owner.hash !== passHash)) {
+      owner.salt = passSalt;
+      owner.hash = passHash;
+      db.sessions = [];
+      changed = true;
+    }
   }
   if (changed) await persist();
 }
