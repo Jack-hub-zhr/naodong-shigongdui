@@ -255,15 +255,28 @@ export function setAuthToken(token) {
 
 async function authFetch(path, options = {}) {
   const token = authToken();
-  const response = await fetch(API.endpoint(path), {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-    cache: 'no-store',
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  let response;
+  try {
+    response = await fetch(API.endpoint(path), {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError('TIMEOUT', '请求超时，请重试', 0);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401 && path !== '/api/auth/login' && path !== '/api/auth/register') {

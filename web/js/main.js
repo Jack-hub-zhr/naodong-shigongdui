@@ -262,8 +262,8 @@ function renderTopbar() {
   const p = state.project;
   const agents = deriveAgents(p);
   const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-  const themeLabel = { light: '切换为深色', dark: '切换为着色', tinted: '切换为亮色' }[theme] || '切换外观';
-  const themeIcon = theme === 'light' ? ICONS.moon : theme === 'dark' ? ICONS.tint : ICONS.sun;
+  const themeLabel = { light: '切换为深色', dark: '切换为亮色' }[theme] || '切换外观';
+  const themeIcon = theme === 'light' ? ICONS.moon : ICONS.sun;
   const alert = p && p.status === 'AWAITING_USER';
   const railOpen = appEl.classList.contains('rail-open');
   const crewOpen = appEl.classList.contains('crew-open');
@@ -1351,9 +1351,9 @@ function profileHtml() {
 
       <div class="panel">
         <h3>外观</h3>
-        <div class="desc">跟随系统或固定亮色、深色、着色。</div>
+        <div class="desc">默认跟随系统，也可固定亮色或深色。</div>
         <div class="seg-full" role="group" aria-label="外观">
-          ${[['system', '跟随系统'], ['light', '亮色'], ['dark', '深色'], ['tinted', '着色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
+          ${[['system', '跟随系统'], ['light', '亮色'], ['dark', '深色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
         </div>
         <div class="panel-sect">
           <div class="setting-row">
@@ -1369,7 +1369,7 @@ function profileHtml() {
 
       <div class="panel">
         <h3>制作服务连接</h3>
-        <div class="desc">自动选择可用通道；填入自己的 Key 后优先走你的服务。</div>
+        <div class="desc">自动选择可用通道，服务端统一转发。</div>
         <div class="channel-row">
           <span class="dot ${hb.tone === 'fail' ? 'err' : hb.tone === 'wait' ? 'wait' : 'ok'}"></span>
           <div class="txt"><b>${COPY.channel}</b><span>${esc(hb.text)}</span></div>
@@ -1387,7 +1387,6 @@ function profileHtml() {
           <span style="color:var(--text-3)">07:00–23:59 每 15 分钟保活，冷启动通常 < 30 秒。</span>
         </div>
       </div>
-      ${qwenProviderHtml()}
     </div>
 
     <div>
@@ -1410,7 +1409,7 @@ function profileHtml() {
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
         <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
-        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v3</span> 三态 · 石墨 / 纸白 / 着色 · iOS 26 手感</span></div>
+        <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v3</span> 亮暗双态 · 石墨 / 纸白 · iOS 26 手感</span></div>
         <div class="about-row"><span>生成服务</span><span class="side">自动选择可用连接 · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
     </div>
@@ -1652,17 +1651,17 @@ document.addEventListener('click', (ev) => {
     setThemeUser(themeSet.dataset.themeSet);
     renderChrome();
     renderPage();
-    toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色', tinted: '着色' }[themeSet.dataset.themeSet] || ''));
+    toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[themeSet.dataset.themeSet] || ''));
     return;
   }
 
   if (ev.target.closest('#toggle-theme')) {
     const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : current === 'dark' ? 'tinted' : 'light';
+    const next = current === 'light' ? 'dark' : 'light';
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + ({ light: '亮色', dark: '深色', tinted: '着色' }[next] || next));
+    toast('外观：' + ({ light: '亮色', dark: '深色' }[next] || next));
     return;
   }
 
@@ -2252,11 +2251,11 @@ function runPaletteItem(item) {
   if (item.route) { setRoute(item.route); renderAll(); workspaceEl.scrollTop = 0; }
   else if (item.action === 'theme') {
     const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : current === 'dark' ? 'tinted' : 'light';
+    const next = current === 'light' ? 'dark' : 'light';
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + ({ light: '亮色', dark: '深色', tinted: '着色' }[next] || next));
+    toast('外观：' + ({ light: '亮色', dark: '深色' }[next] || next));
   } else if (item.id) {
     const full = safeReadProject(item.id);
     if (full) {
@@ -2387,9 +2386,11 @@ async function submitAuth(form) {
       ? await registerAccount({ username, name: username, email, password })
       : await loginAccount({ username, password });
     state.user = user;
+    ui.authBusy = false;
     closeAuth(true);
-    await hydrateAfterLogin();
+    renderAll();
     toast(`欢迎，${user.name}`, 'ok');
+    await hydrateAfterLogin();
     maybeOpenGuide();
   } catch (error) {
     ui.authBusy = false;
