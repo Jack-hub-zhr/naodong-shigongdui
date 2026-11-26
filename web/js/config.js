@@ -9,8 +9,8 @@ export const BRAND = {
 
 export const LOGO_SVG = `
 <svg viewBox="0 0 32 32" aria-hidden="true">
-  <path d="M16 5.5 24.5 10.8V21.2L16 26.5 7.5 21.2V10.8Z" fill="none" stroke="#3B6FE0" stroke-opacity=".5" stroke-width="1.2"/>
-  <path d="M12.6 9.2h6.8v3.2h-6.8zM13.8 14.2h4.4v3.2h-4.4zM14.9 19.2h2.2v4h-2.2z" fill="#F0C24B"/>
+  <rect x="1.5" y="1.5" width="29" height="29" rx="9" fill="#F6B84A"/>
+  <path d="M10 8.5h13v4.2H15v3.2h6.4V20H15v6h-5z" fill="#1A1917"/>
 </svg>`;
 
 export const ICONS = {
@@ -87,7 +87,7 @@ export const COPY = {
     profile: '我的',
   },
   lead: {
-    idea: '一句话就够。预计 3–8 分钟，最多 3 轮，只会问你 1 次；你可以离开，回来还在原位。',
+    idea: '一句话说清要做什么、给谁用。团队会拆解、试跑、修正，只在关键分叉停一次。',
     build: '',
     review: '一个项目一页到底：正在做、要不要你、成品都在这里。',
     profile: '管理账号、外观与制作偏好。项目会跟随账号自动同步到云端，服务连接密钥不下发浏览器。',
@@ -96,7 +96,7 @@ export const COPY = {
   dispatch: '开始制作',
   dispatchShort: '开始制作',
   dispatchPending: '正在开始…',
-  queueHint: '预计 3–8 分钟 · 最多 3 轮 · 只会问你 1 次',
+  queueHint: '按 Enter 开始 · 可随时暂停，进度会保留',
   budgetNote: '受团队预算限制，当前版本会先把结构和可用性做扎实，视觉细节相对克制。',
   recipesTitle: '没想好？从这三句开始',
   recentTitle: '项目',
@@ -120,7 +120,7 @@ export const COPY = {
   pausedNoProvider: '当前服务连接不可用，请到我的页检查服务连接',
   pausedError: '服务连接暂时故障，团队将在 {s} 秒后自动续跑',
   channel: '公共模型链 · 服务端代理',
-  channelShort: '公共模型链',
+  channelShort: '默认服务',
   serial: '串行作业',
   live: 'LIVE',
   checkpoint: '需要你决定',

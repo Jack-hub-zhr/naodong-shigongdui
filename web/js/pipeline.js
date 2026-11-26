@@ -548,7 +548,7 @@ export async function advance(p, deps) {
         startAgent(p, 'product', 8);
         deps.log('ORCHESTRATOR', `收到想法《${p.title}》，开始拆解子任务`);
         deps.log('ORCHESTRATOR', '子任务已派发给 产品 / 开发 / 审查');
-        deps.log('SYSTEM', `真实服务连接 · ${p.providerName || '公共模型链'}（服务端代理，密钥不下发浏览器）`);
+        deps.log('SYSTEM', '真实服务已连接（服务端代理，密钥不下发浏览器）');
         p.updatedAt = Date.now();
         deps.save();
         break;
@@ -689,7 +689,7 @@ export async function advance(p, deps) {
             stopAgent(p, 'orch', 70);
             addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `通过版 · ${report.findings.length} 项检查全过`, '等统筹者整理成给你确认的方案');
             addHandoff(p, 'ORCHESTRATOR', 'USER', `选择卡 · ${p.decisions.length} 个方案`, '两个都能用，差别写在方案里');
-            deps.log('ORCHESTRATOR', '产物已通过自检，需要你决定等你拍板', 'wait');
+            deps.log('ORCHESTRATOR', '产物已通过自检，等你拍板', 'wait');
             p.updatedAt = Date.now();
             deps.save();
             return 'await';
@@ -729,7 +729,7 @@ export async function advance(p, deps) {
         p.roundStartedAt = Date.now();
         stopAgent(p, 'orch', 55);
         startAgent(p, 'orch', 55);
-        deps.log('ORCHESTRATOR', `判定修正，回退到最近需要你决定，开始第 ${p.round} 轮`);
+        deps.log('ORCHESTRATOR', `判定修正，回退到最近一版，开始第 ${p.round} 轮`);
         p.updatedAt = Date.now();
         deps.save();
         break;

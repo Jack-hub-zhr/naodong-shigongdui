@@ -6,7 +6,7 @@ import {
 import {
   state, KEYS, STAGES, STATUS, loadTheme, loadState, saveNow, scheduleSave,
   setRoute, setThemeUser, newProject, touch, addLog, deriveAgents, workingCount,
-  badgeOf, stageOf, projectPct, stageProgress, formatClock, formatRelative,
+  badgeOf, stageOf, projectStage, roundLabel, projectPct, stageProgress, formatClock, formatRelative,
   formatMmSs, formatDateTime, totalElapsed, pauseReasonText, callsToday, summarize,
   normalizeRoute, setCloudSaver, applyAccountState, clearAccountData, accountPayload, removeProject,
 } from './store.js';
@@ -186,8 +186,6 @@ function navCount(route) {
 function renderRail() {
   const p = state.project;
   const agents = deriveAgents(p);
-  const recent = (state.projects || []).slice(0, 6);
-  const activeProjectId = state.route === 'build' ? p?.id : null;
   railEl.innerHTML = `
     <div class="brand" data-nav="idea" role="button" tabindex="0">
       <div class="brand-mark">${LOGO_SVG}</div>
@@ -205,16 +203,8 @@ function renderRail() {
         ${ICONS.profile}<span>我的</span>
       </button>
     </div>
-    <div class="rail-recent">
-      <div class="head"><span>项目</span><b>${state.projects.length}</b></div>
-      ${recent.length ? recent.map((item) => `
-        <button class="item ${item.id === activeProjectId ? 'active' : ''}" data-open="${esc(item.id)}" type="button">
-          <span class="bullet ${item.status === 'DELIVERED' ? 'ok' : item.status === 'AWAITING_USER' ? 'wait' : ['BUILDING', 'REVIEWING', 'REWORKING'].includes(item.status) ? 'run' : ''}"></span>
-          <span>${esc(item.title)}</span>
-        </button>`).join('') : '<div class="crew-empty" style="padding:6px 0;text-align:left">还没有项目</div>'}
-    </div>
     <div class="rail-foot">
-      <div class="row"><span class="dot ${agents.some((a) => ['working', 'thinking', 'reviewing'].includes(a.state)) ? 'run' : 'ok'}"></span>${COPY.channelShort}<span class="ver">${BRAND.version}</span></div>
+      <div class="row"><span class="dot ${agents.some((a) => ['working', 'thinking', 'reviewing'].includes(a.state)) ? 'run' : 'ok'}"></span>服务在线</div>
       <div class="row"><span>${workingCount(agents)} 名成员在忙</span></div>
     </div>`;
 }
@@ -243,13 +233,13 @@ function renderTopbar() {
         ${ICONS.sliders}<span class="label">团队</span>
         <span class="badge">${workingCount(agents)}</span>
       </button>
-      <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">?</button>
+      <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">${ICONS.info}</button>
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="${themeLabel}" title="${themeLabel}">
         ${dark ? ICONS.sun : ICONS.moon}
       </button>
-      <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录或注册'}">
+      <button class="account-btn" data-account type="button" aria-label="${state.user ? '账号' : '登录以同步项目'}">
         <span class="avatar">${state.user ? esc((state.user.name || state.user.email || '你').slice(0, 1)) : ICONS.profile}</span>
-        <span class="account-name">${state.user ? esc(state.user.name || state.user.email.split('@')[0]) : '登录'}</span>
+        <span class="account-name">${state.user ? esc(state.user.name || state.user.email.split('@')[0]) : '同步'}</span>
       </button>
     </div>`;
 }
@@ -278,20 +268,18 @@ function agentCard(a, opts = {}) {
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
   const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
-  const saluting = a.key === ROLES.ORCHESTRATOR.key;
   return `<button class="agent-card ${opts.mini ? 'mini' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">
       <div class="agent-avatar ${avatarClass}">${a.letter}</div>
-      <div class="agent-id"><b>${a.name}${saluting ? '<span class="salute" role="img" aria-label="敬礼">🫡</span>' : ''}<em>${a.role}</em></b></div>
+      <div class="agent-id"><b>${a.name}<em>${a.role}</em></b></div>
       <div class="state">${statePill}</div>
     </div>
     <div class="agent-action">${esc(a.action)}</div>
-    <div class="agent-progress">
-      <div class="bar ${a.state === 'done' ? 'ok' : a.state === 'paused' ? 'danger' : ''}"><i style="width:${Math.max(0, Math.min(100, a.progress))}%"></i></div>
-      <span class="num">${a.state === 'done' ? '已完成' : a.progress + '%'}</span>
-    </div>
-    ${a.recent?.length ? `<ul class="agent-recent">${a.recent.map((r) => `<li><span class="t">${formatClock(r.ts)}</span><span>${esc(r.text).slice(0, 46)}</span></li>`).join('')}</ul>` : ''}
+    ${a.handoff || a.elapsedMs ? `<div class="agent-meta">
+      ${a.handoff ? `<span>${esc(a.handoff)}</span>` : ''}
+      <span>${a.state === 'done' ? '已完成' : a.elapsedMs ? fmtElapsed(a.elapsedMs) : ''}</span>
+    </div>` : ''}
   </button>`;
 }
 
@@ -303,12 +291,13 @@ function crewBodyHtml(p, { mini = false } = {}) {
   }
   const agents = deriveAgents(p);
   const prog = stageProgress(p);
+  const nowStage = STAGES[prog.index] || STAGES[0];
   return `
     <div class="crew-task">
-      <div class="row"><span>当前任务</span><span class="r">R${p.round || 0}</span></div>
+      <div class="row"><span>当前任务</span><span class="r">${roundLabel(p)}</span></div>
       <div class="title">${esc(p.title)}</div>
-      <div class="stage-row"><span>${prog.done} / ${prog.total} 阶段</span><span class="pct">${projectPct(p)}%</span></div>
-      <div class="bar ${p.status === 'DELIVERED' ? 'ok' : p.status === 'PAUSED' ? 'danger' : ''}"><i style="width:${projectPct(p)}%"></i></div>
+      <div class="stage-row"><span>现在 · ${nowStage.name}</span><span>${prog.done} / ${prog.total} 阶段完成</span></div>
+      <div class="stage-dots">${STAGES.map((st, i) => `<span class="${i < prog.done ? 'done' : i === prog.index ? 'active' : ''}">${st.no}</span>`).join('')}</div>
     </div>
     ${agents.map((a) => agentCard(a, { mini })).join('')}`;
 }
@@ -324,13 +313,13 @@ function renderCrew() {
   const header = `
     <div class="crew-head">
       <div class="row"><h2>团队</h2><span class="live"><span class="dot ${p && ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status) ? 'run' : 'ok'}"></span>${COPY.live}</span></div>
-      <div class="crew-sub"><span>${agents.length} 名成员</span><span>·</span><span>${workingCount(agents)} 名作业中</span><span>·</span><span>${p?.providerName || COPY.channelShort}</span></div>
+      <div class="crew-sub"><span>${agents.length} 名成员</span><span>·</span><span>${workingCount(agents)} 名作业中</span><span>·</span><span>${p ? '服务在线' : '待命中'}</span></div>
     </div>`;
   const scrollTop = crewEl.querySelector('.crew-body')?.scrollTop || 0;
   crewEl.innerHTML = `${header}
     <div class="crew-body">${crewBodyHtml(p)}</div>
     <div class="crew-foot">
-      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
+      <span>${p ? `${roundLabel(p)} · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
       <span class="side">${p ? '<button class="btn" data-nav="profile" type="button">更多记录</button>' : ''}</span>
     </div>`;
   const body = crewEl.querySelector('.crew-body');
@@ -376,7 +365,6 @@ function renderAll() {
   renderChrome();
   renderCrew();
   renderPage();
-  ensureAuthGate();
 }
 
 // view: idea
@@ -409,13 +397,11 @@ function ideaHtml() {
       <td class="dim">${esc(item.styleLabel || STYLES.find((x) => x.key === item.style)?.label || '产品风')}</td>
       <td>${statusPillOf(item)}</td>
       <td class="dim">${rel(item.updatedAt)}</td>
-      <td class="del-cell"><button class="task-del-x" data-del="${esc(item.id)}" type="button" aria-label="删除任务" title="删除任务">${ICONS.close}</button></td>
       <td class="go">→</td>
     </tr>`).join('');
   const mobileRows = projects.map((item) => `
     <div class="recent-row" data-open="${esc(item.id)}" role="button" tabindex="0">
-      <div class="txt"><b>${esc(item.title)}</b><span>${statusPillOf(item)}<span>第 ${item.round || 0} 轮</span><span>${rel(item.updatedAt)}</span></span></div>
-      <button class="task-del-x" data-del="${esc(item.id)}" type="button" aria-label="删除任务" title="删除任务">${ICONS.close}</button>
+      <div class="txt"><b>${esc(item.title)}</b><span>${statusPillOf(item)}<span>${roundLabel(item)}</span><span>${rel(item.updatedAt)}</span></span></div>
       <span class="chev">›</span>
     </div>`).join('');
 
@@ -456,7 +442,7 @@ function ideaHtml() {
       </div>
       <div class="flow-strip">
         <div class="flow-avatars">${agents.map((a) => `<span>${a.letter}</span>`).join('')}</div>
-        <div class="txt">统筹者拆解 · 策划者定标准 · 编程者制作 · 检查者检查 · 打磨者打磨。当前 <b>${COPY.channelShort}</b> ${online ? '在线' : '连接中'}。</div>
+        <div class="txt">统筹者拆解 · 策划者定标准 · 编程者制作 · 检查者检查 · 打磨者打磨。服务${online ? '在线' : '连接中'}。</div>
       </div>
     </div>
     <aside>
@@ -482,7 +468,7 @@ function ideaHtml() {
     </div>
     ${projects.length ? `
       <table class="recent-table">
-        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th><th></th></tr></thead>
+        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="recent-rows">${mobileRows}</div>
@@ -542,18 +528,14 @@ function statusTableHtml(p) {
   const agents = deriveAgents(p);
   return `<div class="status-table-wrap">
     <table class="status-table">
-      <thead><tr><th role="columnheader">员工</th><th>状态</th><th>当前动作</th><th>进度</th><th>轮次</th><th>用时</th></tr></thead>
+      <thead><tr><th role="columnheader">成员</th><th>现在在做什么</th><th>产出去向</th><th>本次用时</th><th>状态</th></tr></thead>
       <tbody>
         ${agents.map((a) => `<tr>
           <td class="who"><span class="mini-avatar">${a.letter}</span><span>${a.name}<span class="sub">${a.role}</span></span></td>
-          <td>${pill(a.label, a.tone)}</td>
           <td>${esc(a.action)}</td>
-          <td class="bar-cell">
-            <div class="bar ${a.state === 'done' ? 'ok' : ''}"><i style="width:${a.progress}%"></i></div>
-            <span class="num">${a.state === 'done' ? '100%' : a.progress + '%'}</span>
-          </td>
-          <td class="mono">R${a.round || 0}</td>
+          <td>${esc(a.handoff || '—')}</td>
           <td class="mono">${fmtElapsed(a.elapsedMs)}</td>
+          <td>${pill(a.label, a.tone)}</td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -561,7 +543,7 @@ function statusTableHtml(p) {
 }
 
 function stepperHtml(p) {
-  const stage = stageOf(p.status);
+  const stage = projectStage(p);
   const fail = p.status === 'PAUSED' ? -1 : (p.report && !p.report.passed && p.phase === 'review' ? stage : -1);
   return `<div class="stepper">${STAGES.map((s, i) => {
     const done = i < stage || (p.status === 'DELIVERED');
@@ -590,15 +572,16 @@ function pauseBanner(p) {
     </div>`;
   }
   if (isQuotaPause(p)) {
-    return `<div class="pause-banner">
+    return `<div class="pause-banner pause-error">
       <span class="dot err"></span>
-      <span><b>团队这轮预算用完了</b> ${secs != null ? `，${secs} 秒后自动重试，无需操作` : '，正在自动重试'}</span>
+      <span><b>这轮没有成功</b> ${secs != null ? `· 免费额度暂时用完，${secs} 秒后自动重试` : '· 免费额度暂时用完'}</span>
+      <span class="act"><button class="btn small" id="resume-now" type="button">立即重试</button><button class="btn small" data-nav="profile" type="button">换模型</button></span>
     </div>`;
   }
-  return `<div class="pause-banner">
+  return `<div class="pause-banner pause-error">
     <span class="dot err"></span>
-    <span><b>${reason.long}</b> ${secs != null ? `，团队将在 ${secs} 秒后自动续跑` : '，请到我的页检查服务连接'}</span>
-    <span class="act"><button class="btn small" id="resume-now" type="button">${COPY.retry}</button></span>
+    <span><b>${reason.long}</b> ${secs != null ? `，${secs} 秒后自动续跑` : '，需要你换一个可用连接或立即重试'}</span>
+    <span class="act"><button class="btn small" id="resume-now" type="button">立即重试</button><button class="btn small" data-nav="profile" type="button">换模型</button></span>
   </div>`;
 }
 
@@ -606,8 +589,8 @@ function humanStatus(p) {
   const next = p.nextRetryAt ? formatClock(p.nextRetryAt) : '';
   if (p.status === 'PAUSED') {
     if (p.pausedReason === 'USER') return '任务已暂停，进度已保存，随时可以继续。';
-    if (isQuotaPause(p)) return `团队这轮预算用完了，${next ? next + ' ' : ''}自动继续，不用你点。`;
-    return `连接暂时断了，${next ? next + ' ' : ''}自动再试一次，不用你点。`;
+    if (isQuotaPause(p)) return `这轮免费额度用完了，${next ? next + ' ' : ''}自动再试；也可以换模型或立即重试。`;
+    return `这轮没有成功，${next ? next + ' ' : ''}会自动再试；也可以点“立即重试”或去我的页换一个连接。`;
   }
   if (p.status === 'AWAITING_USER') {
     if (p.awaitReason === 'escalate') return '同一个问题连续两轮没修好，需要你定个方向。';
@@ -617,6 +600,7 @@ function humanStatus(p) {
     const pass = p.report?.passed;
     return `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
   }
+  if (p.phase === 'intake' || p.phase === 'plan') return '统筹者和策划者在拆这句话：定 4 个场景、3 轮上限和 4 条完成标准 · 约 20 秒。';
   if (p.status === 'REVIEWING') return `检查者在检查第 ${p.round} 轮：逐条看检查结果，不靠感觉 · 约 30 秒出结果。`;
   if (p.status === 'REWORKING') {
     const why = (p.failedIds || []).slice(0, 2).map((id) => {
@@ -625,13 +609,13 @@ function humanStatus(p) {
     }).join('、');
     return `第 ${p.round} 轮修正：编程者在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
   }
-  if (p.status === 'BUILDING') return `编程者在第 ${p.round || 1} 轮制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
+  if (p.status === 'BUILDING') return `编程者在${roundLabel(p)}制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
   return '统筹者在拆这句话：先定 3 轮上限，再交给策划者写完成标准 · 约 20 秒。';
 }
 
 function stageDetailHtml(p) {
   if (!p || p.status === 'DELIVERED' || p.status === 'AWAITING_USER') return '';
-  const idx = stageOf(p.status);
+  const idx = projectStage(p);
   const defs = [
     { no: '01', title: '理解', owner: '统筹者 → 策划者', text: '把一句话拆成 4 个场景，定 3 轮上限；策划者写下 4 条能检查的完成标准。', items: ['不问你细节，先按最合理的理解开工', '写清不做什么，避免范围膨胀'] },
     { no: '02', title: '制作', owner: '编程者', text: '按四段结构和风格 token 写 HTML/CSS，先自己跑一遍，再把脚本补上。', items: ['色、字、距、角、影全部来自 tokens', '先交付可打开的页面，再补交互'] },
@@ -684,7 +668,6 @@ function taskControls(p) {
   const active = ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status);
   return `<div class="task-controls">
     ${active ? '<button class="btn small" id="pause-task" type="button">暂停任务</button>' : ''}
-    <button class="btn small task-delete" id="delete-task" type="button">删除任务</button>
   </div>`;
 }
 
@@ -716,6 +699,7 @@ function recordsHtml(p) {
         </div>
       </div>
       ${state.view === 'timeline' ? timelineHtml(p) : statusTableHtml(p)}
+      ${p ? `<div class="records-danger"><button class="danger-link" id="delete-task" type="button">删除这个任务</button><span>删除后本地和云端都会移除，不能恢复</span></div>` : ''}
     </div>` : ''}
   </section>`;
 }
@@ -728,16 +712,11 @@ function accountDisplayName() {
 
 function ensureTeamChat(p) {
   const name = accountDisplayName();
-  if (Array.isArray(p.chat) && p.chatName === name) return;
-  const ts = Date.now();
+  if (!Array.isArray(p.chat)) p.chat = [];
+  // 只清掉旧版自动生成的五条敬礼，不制造新的自动消息。
+  if (p.chat.every((m) => m.salute)) p.chat = [];
+  if (p.chatName === name) return;
   p.chatName = name;
-  p.chat = CREW_ORDER.map((role, i) => ({
-    id: 'c_' + (ts.toString(36)) + '_' + i,
-    role,
-    text: `向${name}敬礼！`,
-    ts: ts + i * 180,
-    salute: true,
-  }));
   saveNow();
 }
 
@@ -770,7 +749,7 @@ function scrollChatBottom() {
 
 function teamChatHtml(p) {
   ensureTeamChat(p);
-  const list = (p.chat || []).slice(-30);
+  const list = (p.chat || []).filter((m) => !m.salute).slice(-30);
   return `<section class="section team-chat" id="team-chat">
     <div class="section-head">
       <h2>团队聊天</h2>
@@ -916,7 +895,7 @@ function buildHtml() {
   const awaiting = p.status === 'AWAITING_USER';
   return `
   <button class="back-link" data-nav="idea" type="button">← 项目</button>
-  <div class="project-head">
+  <div class="project-head ${awaiting ? 'is-awaiting' : ''}">
     <div class="eyebrow">当前项目 · ${projectStyleLabel(p)}</div>
     <div class="title-row">
       <h1 class="page-title">${esc(p.title)}</h1>
@@ -928,24 +907,24 @@ function buildHtml() {
     </div>
     ${p.status === 'DELIVERED' ? `<p class="budget-note">${COPY.budgetNote}</p>` : ''}
     <div class="meta-row">
-      <span>第 <b>${p.round || 0} 轮</b> / 最多 ${p.maxRound || 3} 轮</span>
+      <span><b>${roundLabel(p)}</b> / 最多 ${p.maxRound || 3} 轮</span>
       <span>更新 <b data-rel="${p.updatedAt}">${rel(p.updatedAt)}</b></span>
-      ${p.artifact ? `<span>成品 <b>${(p.artifact.html.length / 1024).toFixed(1)} KB</b></span>` : ''}
+      ${p.artifact ? `<span>当前版本 <b>${(p.artifact.html.length / 1024).toFixed(1)} KB</b></span><button class="btn small" id="open-artifact" type="button">打开预览 ↗</button>` : ''}
     </div>
     ${deliverActions(p)}
     ${taskControls(p)}
   </div>
   ${pauseBanner(p)}
-  ${stepperHtml(p)}
-  ${handoffsHtml(p)}
-  ${stageDetailHtml(p)}
-  ${awaiting ? `<section class="section act-section">
-    <div class="act-label">需要你确认</div>
-    <div class="act-note">这一步只问你一次；选完就继续，不用再回来点。</div>
+  ${awaiting ? `<section class="section act-section await-focus">
+    <div class="await-lead"><span class="dot wait"></span><span><b>现在轮到你</b> · 团队已停在这里，选完就继续</span></div>
     ${p.awaitReason === 'escalate' ? escalateCard(p) : decisionCard(p)}
     ${p.artifact ? previewCard(p, { compact: true }) : ''}
-  </section>` : ''}
-  ${p.status === 'DELIVERED' ? `<section class="section act-section">
+  </section>` : `
+    ${stepperHtml(p)}
+    ${handoffsHtml(p)}
+    ${stageDetailHtml(p)}
+  `}
+  ${!awaiting && p.status === 'DELIVERED' ? `<section class="section act-section">
     ${previewCard(p)}
   </section>` : ''}
   ${teamChatHtml(p)}
@@ -968,6 +947,18 @@ function decisionCard(p) {
   const total = list.length;
   const index = list.findIndex((x) => x.id === d.id) + 1;
   const allChosen = list.every((x) => x.chosen);
+  const preview = (o, key) => `
+    <div class="option-preview" data-variant="${key}" aria-hidden="true">
+      <div class="mini-screen">
+        <span class="mini-top"></span>
+        <span class="mini-hero">${esc((o?.label || '').slice(0, 8))}</span>
+        <span class="mini-line"></span>
+        <span class="mini-line short"></span>
+        <span class="mini-cta">${key === 'A' ? '直接开始' : '先看一步'}</span>
+        ${key === 'B' ? '<span class="mini-note">多一层铺垫</span>' : ''}
+      </div>
+      <span class="preview-caption">${key === 'A' ? '一屏直达' : '分层开场'} · 方向示意</span>
+    </div>`;
   const opt = (o, i) => {
     const key = o?.key || (i === 0 ? 'A' : 'B');
     const bullet = o?.tradeoff ? `<ul class="tradeoff"><li>${esc(Array.isArray(o.tradeoff) ? o.tradeoff.join(' / ') : o.tradeoff)}</li></ul>` : '';
@@ -975,6 +966,7 @@ function decisionCard(p) {
     <button class="option" type="button" data-choice="${d.id}:${key}" aria-pressed="${d.chosen === key}">
       <span class="key-wrap"><span class="key">${key}</span><span>方案</span></span>
       <span class="pick" aria-hidden="true"></span>
+      ${preview(o, key)}
       <h4>${esc(o?.label || '未命名方案')}</h4>
       <span class="body">${esc(o?.body || '')}</span>
       ${bullet}
@@ -986,15 +978,12 @@ function decisionCard(p) {
       <h3>${d.topic ? `${esc(d.topic)}：` : ''}${esc(d.title || '待定')}</h3>
       <span class="act">${d.chosen ? pill('已拍板 · ' + d.chosen, 'ok') : pill('等你拍板', 'wait', 'data-breath="1"')}</span>
     </div>
-    <div class="decision-context">
-      <div class="quote"><span class="q">“</span>${esc(p.prompt)}<span class="q close">”</span></div>
-    </div>
-    <div class="decision-sub">${esc(tagLabel(p.tag))} · 第 ${p.round} 轮 · 团队建议在下面两个方案里二选一${d.context ? ` · ${esc(d.context)}` : ''}</div>
+    <div class="decision-sub">${esc(d.context || '两个方案都能验收，差别在第一次打开时的感受')} · ${esc(tagLabel(p.tag))} · ${roundLabel(p)}</div>
     <div class="options" role="group" aria-label="方案选项">
       ${opt(d.optionA, 0)}${opt(d.optionB, 1)}
     </div>
     <div class="decision-foot">
-      <span>${allChosen ? '两个选择都已拍板，可以继续制作' : COPY.decisionFoot}</span>
+      <span>${allChosen ? '选择已记录，可以继续制作' : COPY.decisionFoot}</span>
       <span class="spacer"></span>
       <button class="btn" id="reject-plan" type="button">${COPY.reject}</button>
       <button class="btn primary" id="apply-plan" type="button" ${allChosen ? '' : 'disabled'}>${COPY.accept}</button>
@@ -1073,7 +1062,7 @@ function reviewHtml() {
   ${awaiting && p.awaitReason === 'escalate' ? escalateCard(p) : ''}
   ${awaiting && p.awaitReason !== 'escalate' ? decisionCard(p) : ''}
   ${!awaiting && p.status !== 'DELIVERED' ? `<div class="await-bar" style="margin-top:20px">
-      <span class="dot run"></span><span>团队正在作业，第 ${p.round} 轮。需要你决定会在产物通过自检后出现在这里。</span>
+      <span class="dot run"></span><span>团队正在作业，${roundLabel(p)}。需要你决定会在产物通过自检后出现在这里。</span>
       <span class="act"><button class="btn small" data-nav="build" type="button">${COPY.goBuild}</button></span>
     </div>` : ''}
   ${p.status === 'DELIVERED' && !awaiting ? previewCard(p) : ''}
@@ -1087,7 +1076,7 @@ function historyRowsHtml() {
   if (!items.length) return `<div class="empty" style="padding:20px;border:0">还没有历史想法。</div>`;
   return items.map((item) => `
     <button class="history-row" data-open="${esc(item.id)}" type="button">
-      <div class="txt"><b>${esc(item.title)}</b><span>${esc(tagLabel(item.tag))} · 第 ${item.round || 0} 轮 · ${formatDateTime(item.updatedAt)}</span></div>
+      <div class="txt"><b>${esc(item.title)}</b><span>${esc(tagLabel(item.tag))} · ${roundLabel(item)} · ${formatDateTime(item.updatedAt)}</span></div>
       ${statusPillOf(item)}
       <span class="chev">›</span>
     </button>`).join('');
@@ -1112,7 +1101,7 @@ function qwenProviderHtml() {
   const current = QWEN_PROVIDERS.find((x) => x.id === cfg.provider) || QWEN_PROVIDERS[0];
   return `<div class="panel provider-panel">
     <h3>Qwen 直连 <span class="chip-mini">可选</span></h3>
-    <div class="desc">公共模型链在排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
+    <div class="desc">默认服务排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
     <div class="provider-form">
       <label class="provider-field">
         <span>服务商</span>
@@ -1132,7 +1121,7 @@ function qwenProviderHtml() {
     </div>
     <div class="provider-state">${cfg.key
       ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
-      : '当前未填 Key，继续使用服务端公共模型链'}</div>
+      : '当前未填 Key，继续使用默认服务'}</div>
     <div class="provider-tip">国内网络优先用<b>硅基流动</b>或百炼、魔搭，控制台打开快、无需 VPN。硅基流动的 Qwen3-8B 是长期免费模型（约 30 次/分钟），注册后可直接创建 Key；百炼新账号有 90 天免费额度，魔搭需绑定阿里云并实名。Groq / OpenRouter 需要能稳定访问外网。</div>
   </div>`;
 }
@@ -1213,7 +1202,7 @@ function guideHtml() {
         <span class="guide-no">07</span>
         <div>
           <h3>账号、外观和模型连接</h3>
-          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用。公共模型链排队时，可以填入自己的 Qwen Key，只保存在这台浏览器，不进入账号同步。</p>
+          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用。默认服务排队时，可以填入自己的 Qwen Key，只保存在这台浏览器，不进入账号同步。</p>
           <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与 Qwen 连接" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接与历史。</figcaption></figure>
         </div>
       </section>
@@ -1293,7 +1282,7 @@ function profileHtml() {
         <div class="account-foot">
           ${state.user
             ? `项目自动同步 · ${state.syncing ? '正在同步…' : state.cloudSavedAt ? '上次同步 ' + rel(state.cloudSavedAt) : '等待首次同步'}${state.cloudError ? ' · <span class="warn">' + esc(state.cloudError) + '</span>' : ''}`
-            : '当前是访客模式，数据只保存在这台浏览器里。'}
+            : '未登录 · 数据只保存在这台浏览器里。'}
         </div>
       </div>
 
@@ -1359,7 +1348,7 @@ function profileHtml() {
         </div>
         <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
         <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v2</span> 双主题 · 石墨 / 纸白 · 单一暖色强调</span></div>
-        <div class="about-row"><span>生成服务</span><span class="side">${esc(p?.providerName || COPY.channelShort)} · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
+        <div class="about-row"><span>生成服务</span><span class="side">自动选择可用连接 · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
     </div>
   </div>`;
@@ -1427,7 +1416,7 @@ document.addEventListener('click', (ev) => {
 
   if (ev.target.closest('#qwen-provider-clear')) {
     setQwenProviderConfig('dashscope', '');
-    toast('已清除本机 Key，回到公共模型链', 'ok');
+    toast('已清除本机 Key，回到默认服务', 'ok');
     renderPage();
     return;
   }
@@ -1677,7 +1666,8 @@ document.addEventListener('keydown', (ev) => {
     if (ui.palette) closePalette(); else openPalette();
   }
   if (ev.key === 'Escape') {
-    if (overlayRoot.querySelector('.guide-modal')) closeGuide();
+    if (overlayRoot.querySelector('.auth-root')) closeAuth();
+    else if (overlayRoot.querySelector('.guide-modal')) closeGuide();
     else if (ui.palette) closePalette();
     else if (ui.sheet) closeCrewSheet();
     else if (document.querySelector('.drawer')) closeDrawer();
@@ -1981,13 +1971,13 @@ function sheetHtml({ mobile = true } = {}) {
     <div class="sheet-head">
       <div>
         <h2>团队</h2>
-        <div class="sub">${agents.length} 名成员 · ${workingCount(agents)} 名作业中 · ${p?.providerName || COPY.channelShort}</div>
+        <div class="sub">${agents.length} 名成员 · ${workingCount(agents)} 名作业中 · ${p ? '服务在线' : '待命中'}</div>
       </div>
       <button class="sheet-close" id="close-sheet" type="button">收起团队</button>
     </div>
     <div class="sheet-body">${crewBodyHtml(p, { mini: true })}</div>
     <div class="sheet-foot">
-      <span>${p ? `第 ${p.round || 0} 轮 · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
+      <span>${p ? `${roundLabel(p)} · 最后更新 ${rel(p.updatedAt)}` : '等待第一个想法'}</span>
       <span class="side"><button class="btn" data-nav="idea" type="button">${COPY.backToIdea}</button></span>
     </div>`;
 }
@@ -2060,7 +2050,7 @@ function openDrawer() {
       <div class="crew-head"><div class="row"><h2>团队</h2><span class="live"><span class="dot ok"></span>LIVE</span></div>
       <div class="crew-sub">${deriveAgents(state.project).length} 名成员 · ${workingCount(deriveAgents(state.project))} 名作业中</div></div>
       <div class="crew-body">${crewBodyHtml(state.project, { mini: true })}</div>
-      <div class="crew-foot"><span>${state.project ? `第 ${state.project.round} 轮 · ${rel(state.project.updatedAt)}` : '待命'}</span>
+      <div class="crew-foot"><span>${state.project ? `${roundLabel(state.project)} · ${rel(state.project.updatedAt)}` : '待命'}</span>
         <span class="side"><button class="btn" id="close-drawer" type="button">收起</button></span></div>
     </div>`;
   overlayRoot.append(scrim, drawer);
@@ -2191,16 +2181,15 @@ function closePalette() {
 
 function authModalHtml() {
   const register = ui.authMode === 'register';
-  const forced = !state.user;
   return `
-  <div class="scrim auth-scrim" ${forced ? '' : 'data-auth-close'}></div>
-  <section class="auth-modal ${forced ? 'auth-forced' : ''}" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-    ${forced ? '' : `<button class="icon-btn auth-close" data-auth-close type="button" aria-label="关闭">${ICONS.close}</button>`}
-    <div class="eyebrow">ACCOUNT</div>
-    <h2 id="auth-title">${register ? '创建你的账号' : '登录 ForgeCrew'}</h2>
+  <div class="scrim auth-scrim" data-auth-close></div>
+  <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button class="icon-btn auth-close" data-auth-close type="button" aria-label="关闭">${ICONS.close}</button>
+    <div class="eyebrow">ACCOUNT · 可选</div>
+    <h2 id="auth-title">${register ? '创建同步账号' : '登录以同步项目'}</h2>
     <p class="auth-lead">${register
-      ? '项目会跟着账号保存，换设备、换浏览器都能接着做。'
-      : '登录或注册后开始使用。项目会跟着账号云端保存，换设备也能接着做。'}</p>
+      ? '账号只用来跨设备同步项目。不注册也能继续用，数据留在这台浏览器。'
+      : '登录只用来把项目同步到其他设备。不登录也能直接用，数据留在这台浏览器。'}</p>
     <div class="auth-tabs segmented" role="tablist">
       <button type="button" data-auth-tab="login" aria-selected="${!register}">登录</button>
       <button type="button" data-auth-tab="register" aria-selected="${register}">注册</button>
@@ -2222,6 +2211,8 @@ function authModalHtml() {
     <div class="auth-foot">
       <span>${register ? '已经有账号？' : '还没有账号？'}</span>
       <button class="link-btn" data-auth-tab="${register ? 'login' : 'register'}" type="button">${register ? '去登录' : '免费注册'}</button>
+      <span class="spacer"></span>
+      <button class="link-btn auth-skip" data-auth-close type="button">先用本机模式</button>
     </div>
     <p class="auth-note">密码只保存加密后的指纹，服务端不会读到明文。</p>
   </section>`;
@@ -2241,24 +2232,8 @@ function openAuth(mode = 'login') {
   });
 }
 
-function closeAuth(force = false) {
-  if (!force && !state.user) return;
+function closeAuth() {
   overlayRoot.querySelector('.auth-root')?.remove();
-}
-
-function ensureAuthGate() {
-  if (state.user) {
-    overlayRoot.querySelector('.auth-root')?.remove();
-    return;
-  }
-  if (overlayRoot.querySelector('.auth-root')) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'auth-root auth-gate';
-  wrap.innerHTML = authModalHtml();
-  overlayRoot.appendChild(wrap);
-  requestAnimationFrame(() => {
-    wrap.querySelector('input[name="email"]')?.focus({ preventScroll: true });
-  });
 }
 
 function rerenderAuth() {
@@ -2469,12 +2444,15 @@ function boot() {
   loadState();
   try { state.tag = localStorage.getItem('fc-tag') || '工具'; } catch (e) {}
   const pathRoute = pathToRoute(location.pathname);
-  const hashRoute = location.hash.replace('#/', '').replace('#', '');
+  const hashRoute = hashToRoute();
   if (pathRoute) {
     state.route = pathRoute;
-    history.replaceState({ route: pathRoute }, '', '#/' + pathRoute);
-  } else if (['idea', 'build', 'review', 'profile'].includes(hashRoute)) {
-    state.route = normalizeRoute(hashRoute);
+    const root = location.pathname.endsWith('/')
+      ? location.pathname
+      : location.pathname.slice(0, location.pathname.lastIndexOf('/') + 1);
+    history.replaceState({ route: pathRoute }, '', root + '#/' + pathRoute);
+  } else if (hashRoute) {
+    state.route = hashRoute;
   }
   renderAll();
   updateRouteFromLocation();
@@ -2512,13 +2490,20 @@ function boot() {
 function pathToRoute(pathname) {
   const clean = decodeURIComponent(pathname || '/').replace(/\/$/, '');
   if (clean === '' || clean === '/' || clean === '/index.html') return null;
-  const map = { '/idea': 'idea', '/build': 'build', '/review': 'review', '/profile': 'profile', '/我的': 'profile', '/想法': 'idea', '/制作': 'build', '/验收': 'review' };
+  const map = { '/idea': 'idea', '/new': 'idea', '/build': 'build', '/review': 'review', '/profile': 'profile', '/我的': 'profile', '/想法': 'idea', '/制作': 'build', '/验收': 'review' };
   return map[clean] || null;
 }
 
+function hashToRoute() {
+  const raw = location.hash.replace(/^#\/?/, '');
+  if (!raw) return null;
+  if (raw === 'new') return 'idea';
+  return ['idea', 'build', 'review', 'profile'].includes(raw) ? normalizeRoute(raw) : null;
+}
+
 function updateRouteFromLocation() {
-  const hashRoute = location.hash.replace('#/', '').replace('#', '');
-  if (['idea', 'build', 'review', 'profile'].includes(hashRoute) && hashRoute !== state.route) {
+  const hashRoute = hashToRoute();
+  if (hashRoute && hashRoute !== state.route) {
     state.route = hashRoute;
     renderAll();
   }

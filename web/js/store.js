@@ -51,6 +51,20 @@ export function badgeOf(status) {
   return STATUS[status] || STATUS.PENDING;
 }
 
+/** 用运行阶段而不是 status 猜阶段，保证标题、阶段条、成员卡同源。 */
+export function projectStage(p) {
+  if (!p) return 0;
+  if (p.status === 'DELIVERED' || p.phase === 'done' || p.phase === 'polish') return 3;
+  if (p.phase === 'review' || p.phase === 'await') return 2;
+  if (p.phase === 'build' || p.phase === 'apply' || p.phase === 'rework') return 1;
+  if (p.phase === 'intake' || p.phase === 'plan') return 0;
+  return Math.max(0, Math.min(3, Number(p.stage) || 0));
+}
+
+export function roundLabel(p) {
+  return p && p.round > 0 ? `第 ${p.round} 轮` : '准备中';
+}
+
 export const STAGES = [
   { no: '01', key: 'understand', name: '理解' },
   { no: '02', key: 'build', name: '制作' },
@@ -315,7 +329,7 @@ export function newProject(prompt, tag) {
     artifact: null,
     report: null,
     delight: [],
-    providerName: '公共模型链',
+    providerName: '默认服务',
     callsToday: 0,
     agentRuntime: {},
     awaitReason: null,
@@ -456,24 +470,25 @@ export function agentAction(p, key, st) {
   if (p.status === 'PAUSED') {
     return `稍后继续 · ${pauseReasonText(p).short}`;
   }
-  const round = Math.max(1, p.round);
+  const round = Math.max(0, p.round);
+  const when = round ? `第 ${round} 轮` : '准备第 1 轮';
   const map = {
     orch: {
-      thinking: p.phase === 'plan' ? '把这句话拆成 4 个场景，定 3 轮上限' : `监督第 ${round} 轮：谁交了什么，下一步给谁`,
+      thinking: p.phase === 'plan' ? '正在拆成 4 个场景，定 3 轮上限' : `监督${when}：谁交了什么，下一步给谁`,
       blocked: p.awaitReason === 'escalate' ? '同一问题连续失败，等你定方向' : '需要你选一个版本',
       done: '已交付，等你打开或再做一版',
       standby: '等待新项目',
     },
     product: {
-      working: `第 ${round} 轮 · 把这句话拆成 4 条验收标准`,
+      working: `${when} · 把这句话拆成 4 条验收标准`,
       done: '交给编程者：4 条验收标准 + 1 个关键分叉',
       standby: '等统筹者派工',
     },
     builder: {
       working: p.phase === 'rework' || (p.reworkOrder && p.phase === 'build')
-        ? `第 ${round} 轮修正 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
-        : `第 ${round} 轮产出 · 先跑一遍再交出去`,
-      done: `交给检查者：第 ${round} 轮 HTML`, 
+        ? `${when}修正 · 修掉 ${p.failedIds?.slice(0, 2).join(' / ') || '未通过项'}`
+        : `${when}产出 · 先跑一遍再交出去`,
+      done: `交给检查者：${when} HTML`,
       standby: '等策划者写规格',
     },
     reviewer: {
@@ -496,6 +511,12 @@ export function deriveAgents(p, now = Date.now()) {
     const role = Object.values(ROLES).find((r) => r.key === key);
     const s = st[key] || 'standby';
     const progress = !p || s === 'standby' ? 0 : s === 'done' ? 100 : s === 'paused' ? progressFor(p, key, p.pausedAt || now) : progressFor(p, key, now);
+    const handoffs = (p?.handoffs || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+    const outgoing = handoffs.find((h) => ROLES[h.from]?.key === key);
+    const incoming = handoffs.find((h) => ROLES[h.to]?.key === key);
+    const handoff = outgoing
+      ? `交付给 ${ROLES[outgoing.to]?.name || '你'}`
+      : incoming ? `${ROLES[incoming.from]?.name || '团队'} 已交来` : '';
     return {
       key,
       name: role.name,
@@ -504,12 +525,12 @@ export function deriveAgents(p, now = Date.now()) {
       state: s,
       label: stateLabel(s, key),
       action: agentAction(p, key, s),
+      handoff,
       progress,
       round: (p && p.round) || 0,
       elapsedMs: p ? runtimeElapsed(p, key, p.status === 'PAUSED' ? p.pausedAt || now : now) : 0,
       recent: ((p && p.agentRuntime && p.agentRuntime[key]?.recent) || []).slice(0, 3),
       tone: toneOf(s),
-      model: (p && p.providerName) || '公共模型链',
     };
   });
 }
@@ -591,10 +612,10 @@ export function formatDateTime(ts) {
 }
 
 export function stageProgress(p) {
-  if (!p) return { done: 0, total: 4, pct: 0 };
-  const stage = Math.max(0, Math.min(4, (p.stage || 0) + (p.status === 'DELIVERED' ? 0 : 1)));
-  const pct = Math.round((stage / 4) * 100);
-  return { done: stage, total: 4, pct };
+  if (!p) return { index: 0, done: 0, total: 4, pct: 0 };
+  const index = projectStage(p);
+  const done = p.status === 'DELIVERED' ? 4 : index;
+  return { index, done, total: 4, pct: Math.round((done / 4) * 100) };
 }
 
 export function projectPct(p) {
