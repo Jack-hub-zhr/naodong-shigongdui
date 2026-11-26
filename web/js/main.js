@@ -1335,7 +1335,7 @@ function profileHtml() {
             <b>${state.user ? esc(state.user.name) : '还没有登录'}</b>
             <span>${state.user
               ? esc(state.user.email)
-              : '登录后项目跟着账号走，换一台设备也能继续。'}</span>
+              : '登录后项目跟着账号走。'}</span>
           </div>
           <span class="side">
             ${state.user
