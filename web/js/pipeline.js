@@ -351,8 +351,8 @@ export function applyBaseStyle(html, styleKey = 'product') {
   const clean = html.replace(/<style id="fc-base">[\s\S]*?<\/style>/gi, '');
   // 成品自己已经定义了一套色板时，只补字体与 fc token，绝不覆盖它的底色和文字色，
   // 否则会出现“深色外壳 + 白底 hero + 浅色标题”这种不可读组合。
-  const ownPalette = /--(?:bg|background|surface|paper)\s*:/i.test(clean)
-    && /--(?:ink|text|fg|foreground)\s*:/i.test(clean);
+  const ownPalette = /--(?:fc-)?(?:bg|background|surface|paper)\s*:/i.test(clean)
+    && /--(?:fc-)?(?:ink|text|fg|foreground)\s*:/i.test(clean);
   const colorRules = ownPalette ? '' : `
 html body{background:${t.bg}!important;color:${t.ink}!important}`;
   const aliasVars = ownPalette ? `--font:${t.font};` : `--fc-bg:${t.bg};--fc-surface:${t.surface};--fc-ink:${t.ink};--fc-sub:${t.sub};--fc-accent:${t.accent};--fc-line:${t.line};--fc-radius:${t.radius};--fc-shadow:${t.shadow};--fc-heading:${t.heading};--bg:${t.bg};--background:${t.bg};--surface:${t.surface};--card:${t.surface};--paper:${t.surface};--ink:${t.ink};--text:${t.ink};--fg:${t.ink};--foreground:${t.ink};--sub:${t.sub};--muted:${t.sub};--accent:${t.accent};--primary:${t.accent};--line:${t.line};--border:${t.line};--font:${t.font};--radius:${t.radius};--shadow:${t.shadow};`;
