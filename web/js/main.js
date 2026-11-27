@@ -2589,6 +2589,7 @@ function boot() {
   renderAll();
   updateRouteFromLocation();
   hydrate();
+  resumeIfNeeded();
   initAccount();
   requestAnimationFrame(() => translateDOM(document.body));
 
