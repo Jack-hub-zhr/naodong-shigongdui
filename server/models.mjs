@@ -305,7 +305,7 @@ async function request(model, input, withJsonMode = Boolean(input.json)) {
 
 export async function complete(input) {
   const custom = customModel(input.provider, input.providerKey);
-  const models = [custom, ...envModels(), ...pickModels()].filter((m) => m && cooldownLeft(m) === 0);
+  const models = [...envModels(), custom, ...pickModels()].filter((m) => m && cooldownLeft(m) === 0);
   let sawRateLimit = false;
   let lastMessage = '';
 

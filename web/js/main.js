@@ -1169,8 +1169,8 @@ function qwenProviderHtml() {
   const cfg = qwenProviderConfig();
   const current = QWEN_PROVIDERS.find((x) => x.id === cfg.provider) || QWEN_PROVIDERS[0];
   return `<div class="panel provider-panel">
-    <h3>Qwen 直连 <span class="chip-mini">可选</span></h3>
-    <div class="desc">默认服务排队时，可以填入你自己的免费 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
+    <h3>备用模型 Key <span class="chip-mini">可选</span></h3>
+    <div class="desc">DeepSeek 仍是主模型。只有主链排队或失败时，才自动接到这把 Key。Key 存在这台浏览器；请求时会临时交给本站服务端转发，不会被保存，不进入账号同步，也不会写进项目。</div>
     <div class="provider-form">
       <label class="provider-field">
         <span>服务商</span>
@@ -1189,7 +1189,7 @@ function qwenProviderHtml() {
       </div>
     </div>
     <div class="provider-state">${cfg.key
-      ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 优先于公共链`
+      ? `已启用 <b>${esc(current.name)}</b> · ${esc(maskKey(cfg.key))} · 主链失败时接上`
       : '当前未填 Key，继续使用默认服务'}</div>
     <div class="provider-tip">国内网络优先用<b>硅基流动</b>或百炼、魔搭，控制台打开快、无需 VPN。硅基流动的 Qwen3-8B 是长期免费模型（约 30 次/分钟），注册后可直接创建 Key；百炼新账号有 90 天免费额度，魔搭需绑定阿里云并实名。Groq / OpenRouter 需要能稳定访问外网。</div>
   </div>`;
