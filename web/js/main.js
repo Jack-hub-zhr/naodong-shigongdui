@@ -473,7 +473,7 @@ function ideaHtml() {
   <h1 class="page-title idea-title">说一句，<br>五个人把它做出来。</h1>
   <p class="page-lead">${COPY.lead.idea}</p>
 
-  <div class="promise-row"><span class="dot ok"></span><span>预计 3–8 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>只会问你 1 次</span></div>
+  <div class="promise-row"><span class="dot ok"></span><span>预计 2–5 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>只会问你 1 次</span></div>
   <p class="budget-note">${COPY.budgetNote}</p>
 
   <div class="idea-grid">
