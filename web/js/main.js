@@ -227,6 +227,28 @@ function navCount(route) {
   return '';
 }
 
+function railHistoryHtml() {
+  const projects = (state.projects || []).slice();
+  if (!projects.length) {
+    return `<div class="rail-recent">
+      <div class="head"><b>项目历史</b><span>0</span></div>
+      <div class="rail-recent-empty">还没有项目。写一句想法，团队会把它做出来。</div>
+    </div>`;
+  }
+  const list = projects.map((item) => {
+    const tone = { DELIVERED: 'ok', AWAITING_USER: 'wait', BUILDING: 'run', REVIEWING: 'run', REWORKING: 'run', PAUSED: 'fail' }[item.status] || '';
+    const active = state.project && state.project.id === item.id;
+    return `<button class="item ${active ? 'active' : ''}" data-open="${esc(item.id)}" type="button" aria-current="${active ? 'page' : 'false'}">
+      <span class="bullet ${tone}"></span>
+      <span class="txt"><b>${esc(item.title)}</b><em>${badgeOf(item.status)} · ${rel(item.updatedAt)}</em></span>
+    </button>`;
+  }).join('');
+  return `<div class="rail-recent">
+    <div class="head"><b>项目历史</b><span>${projects.length}</span></div>
+    <div class="rail-recent-list">${list}</div>
+  </div>`;
+}
+
 function renderRail() {
   const p = state.project;
   const agents = deriveAgents(p);
@@ -244,6 +266,7 @@ function renderRail() {
         ${ICONS.profile}<span>我的</span>
       </button>
     </div>
+    ${railHistoryHtml()}
     <div class="rail-foot">
       <div class="row"><span class="dot ${agents.some((a) => ['working', 'thinking', 'reviewing'].includes(a.state)) ? 'run' : 'ok'}"></span>服务在线</div>
       <div class="row"><span>${workingCount(agents)} 名成员在忙</span></div>
@@ -448,26 +471,11 @@ function statusPillOf(item) {
 }
 
 function ideaHtml() {
-  const projects = recentItems();
   const p = state.project;
   const agents = deriveAgents(p);
   const online = state.heartbeat.ok !== false;
   const styleKey = state.style || 'product';
   const style = STYLES.find((x) => x.key === styleKey) || STYLES[2];
-  const rows = projects.map((item) => `
-    <tr data-open="${esc(item.id)}">
-      <td class="title">${esc(item.title)}<span class="tag">${esc(item.tag)}</span></td>
-      <td class="dim">${esc(item.styleLabel || STYLES.find((x) => x.key === item.style)?.label || '产品风')}</td>
-      <td>${statusPillOf(item)}</td>
-      <td class="dim">${rel(item.updatedAt)}</td>
-      <td class="go">→</td>
-    </tr>`).join('');
-  const mobileRows = projects.map((item) => `
-    <div class="recent-row" data-open="${esc(item.id)}" role="button" tabindex="0">
-      <div class="txt"><b>${esc(item.title)}</b><span>${statusPillOf(item)}<span>${roundLabel(item)}</span><span>${rel(item.updatedAt)}</span></span></div>
-      <span class="chev">›</span>
-    </div>`).join('');
-
   return `
   <div class="eyebrow">01 <i>·</i> 项目</div>
   <h1 class="page-title idea-title">说一句，<br>五个人把它做出来。</h1>
@@ -522,21 +530,7 @@ function ideaHtml() {
     </aside>
   </div>
 
-  <section class="section">
-    <div class="section-head">
-      <h2>项目</h2>
-      <span class="meta">${projects.length} 个 · 最近更新</span>
-      <span class="spacer"></span>
-      <button class="btn small" data-nav="profile" type="button">全部记录</button>
-    </div>
-    ${projects.length ? `
-      <table class="recent-table">
-        <thead><tr><th>名称</th><th>风格</th><th>状态</th><th>更新</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="recent-rows">${mobileRows}</div>
-    ` : `<div class="empty"><b>${COPY.emptyRecent}</b></div>`}
-  </section>`;
+`;
 }
 
 // view: build
@@ -1219,8 +1213,8 @@ function guideHtml() {
         <span class="guide-no">01</span>
         <div>
           <h3>写一句想法，选好风格就能开工</h3>
-          <p>在首页写清楚“做什么、给谁用、最想要的效果”。标签决定页面骨架，风格决定气质；高级选项可以补上不要什么、参考感觉。点“让团队开工”，五个角色开始接手。</p>
-          <figure><a href="/assets/guide/home.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/home.webp" alt="首页新建项目界面" loading="lazy"></a><figcaption>首页：一句话 + 标签 + 风格，三步开工。</figcaption></figure>
+          <p>在首页写清楚“做什么、给谁用、最想要的效果”。标签决定页面骨架，风格决定气质；高级选项可以补上不要什么、参考感觉。点“让团队开工”，五个角色开始接手。以往项目固定在左侧“项目历史”里，点一下就能切回；手机上在“我的”页查看。</p>
+          <figure><a href="/assets/guide/home.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/home.webp" alt="首页新建项目与左侧项目历史" loading="lazy"></a><figcaption>首页：只留新建入口，项目历史常驻左侧栏。</figcaption></figure>
         </div>
       </section>
       <section class="guide-step">
@@ -1264,9 +1258,9 @@ function guideHtml() {
       <section class="guide-step">
         <span class="guide-no">07</span>
         <div>
-          <h3>账号、外观和模型连接</h3>
-          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用。默认服务排队时，可以填入自己的 Qwen Key，只保存在这台浏览器，不进入账号同步。</p>
-          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与 Qwen 连接" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接与历史。</figcaption></figure>
+          <h3>账号、外观和项目历史</h3>
+          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用；切换外观会立即生效，不再弹提示。项目历史在桌面左侧栏常驻，手机端在“我的”页查看，点条目就能切回。</p>
+          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与项目历史" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接与项目历史。</figcaption></figure>
         </div>
       </section>
     </div>
@@ -1651,7 +1645,6 @@ document.addEventListener('click', (ev) => {
     setThemeUser(themeSet.dataset.themeSet);
     renderChrome();
     renderPage();
-    toast('外观已切换为' + ({ system: '跟随系统', dark: '深色', light: '亮色' }[themeSet.dataset.themeSet] || ''));
     return;
   }
 
@@ -1661,7 +1654,6 @@ document.addEventListener('click', (ev) => {
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + ({ light: '亮色', dark: '深色' }[next] || next));
     return;
   }
 
@@ -2255,7 +2247,6 @@ function runPaletteItem(item) {
     setThemeUser(next);
     renderChrome();
     renderPage();
-    toast('外观：' + ({ light: '亮色', dark: '深色' }[next] || next));
   } else if (item.id) {
     const full = safeReadProject(item.id);
     if (full) {
