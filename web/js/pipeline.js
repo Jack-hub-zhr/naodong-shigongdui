@@ -868,7 +868,7 @@ export async function advance(p, deps) {
           deps.log('ORCHESTRATOR', `第 ${p.round} 轮仍有 ${failed.length} 项未过，按降级策略交付并标注已知限制`, 'wait');
           p.updatedAt = Date.now();
           deps.save();
-          return 'deliver';
+          continue;
         }
         if (repeated) {
           p.escalate = true;
@@ -937,9 +937,10 @@ export async function advance(p, deps) {
         stopAgent(p, 'builder', 100);
         stopAgent(p, 'reviewer', 100);
         startAgent(p, 'pleaser', 10);
-        addHandoff(p, 'REVIEWER', 'PLEASER', `通过版 · 第 ${p.round} 轮`, '功能过了，交给你收字、收色、收动效');
-        addHandoff(p, 'PLEASER', 'USER', `成品 · ${((p.artifact?.html.length || 0) / 1024).toFixed(1)} KB`, '可以打开、导出、分享，也可以再做一版');
-        deps.log('ORCHESTRATOR', `第 ${p.round} 轮成品已交付，等你确认`);
+        const limits = (p.knownLimitations || []).length;
+        addHandoff(p, 'REVIEWER', 'PLEASER', limits ? `降级版 · 第 ${p.round} 轮 · ${limits} 项已知限制` : `通过版 · 第 ${p.round} 轮`, limits ? '已到轮次上限，先交可运行版本' : '功能过了，交给你收字、收色、收动效');
+        addHandoff(p, 'PLEASER', 'USER', `成品 · ${((p.artifact?.html.length || 0) / 1024).toFixed(1)} KB`, limits ? '可打开、导出；未过项已注明' : '可以打开、导出、分享，也可以再做一版');
+        deps.log('ORCHESTRATOR', limits ? `第 ${p.round} 轮成品已降级交付（${limits} 项已知限制），可继续改` : `第 ${p.round} 轮成品已交付，等你确认`);
         p.updatedAt = Date.now();
         deps.save();
         break;
