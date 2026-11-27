@@ -680,6 +680,16 @@ input, textarea { font: inherit; color: inherit; }
 .channel-row .txt b { display: block; font-size: 13px; font-weight: 500; color: var(--text); }
 .channel-row .txt span { display: block; margin-top: 4px; font-size: 12px; color: var(--text-3); }
 .channel-row .side { margin-left: auto; font-size: 12px; color: var(--text-2); }
+
+.history-moved { display: none; }
+@media (min-width: 761px) {
+  .profile-history-panel .history-body { display: none; }
+  .profile-history-panel .history-moved {
+    display: block; font-size: 12px; line-height: 1.65; color: var(--text-3);
+    padding: 2px 0 4px;
+  }
+}
+
 .history-tabs { width: 100%; margin: 2px 0 8px; display: flex; }
 .history-tabs button { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: 12px; white-space: nowrap; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
 .about-product { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }

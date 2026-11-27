@@ -1260,7 +1260,7 @@ function guideHtml() {
         <div>
           <h3>账号、外观和项目历史</h3>
           <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用；切换外观会立即生效，不再弹提示。项目历史在桌面左侧栏常驻，手机端在“我的”页查看，点条目就能切回。</p>
-          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与项目历史" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接与项目历史。</figcaption></figure>
+          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与项目历史" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接；项目历史在左栏，手机在此查看。</figcaption></figure>
         </div>
       </section>
     </div>
@@ -1384,12 +1384,15 @@ function profileHtml() {
     </div>
 
     <div>
-      <div class="panel">
-        <div class="section-head" style="margin-bottom:10px"><h3>历史想法</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
-        <div class="history-tabs segmented" role="tablist">
-          ${['全部', '进行中', '已交付'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
+      <div class="panel profile-history-panel">
+        <div class="section-head" style="margin-bottom:10px"><h3>项目历史</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
+        <div class="history-moved">项目历史已移到左侧栏。点任意条目即可切回项目；手机端在这里查看。</div>
+        <div class="history-body">
+          <div class="history-tabs segmented" role="tablist">
+            ${['全部', '进行中', '已交付'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
+          </div>
+          ${historyRowsHtml()}
         </div>
-        ${historyRowsHtml()}
         <div class="danger-zone">
           <span class="txt">清空想法、日志与成品，无法恢复。</span>
           <span class="side"><button class="btn small ghost-danger" id="clear-start" type="button">清空数据</button></span>
