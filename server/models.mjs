@@ -16,9 +16,9 @@ const REFERER = 'https://forgecrew-studio.onrender.com';
 export const KEYED_PROVIDERS = [
   {
     id: 'deepseek',
-    name: 'DeepSeek · V4.1 Flash',
+    name: 'DeepSeek · V4.1 Chat',
     family: 'DeepSeek V4',
-    model: 'deepseek-flash',
+    model: 'deepseek-chat',
     url: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/chat/completions',
     env: 'DEEPSEEK_API_KEY',
   },
