@@ -15,6 +15,7 @@ import {
   loadCloudState, saveCloudState, qwenProviderConfig, setQwenProviderConfig, QWEN_PROVIDERS,
 } from './api.js';
 import { advance, resumeFromPause, inspect, applyBaseStyle } from './pipeline.js';
+import { getLang, setLang, tr, translateDOM, translateText, startI18n } from './i18n.js';
 
 const appEl = document.getElementById('app');
 const railEl = document.getElementById('rail');
@@ -304,6 +305,7 @@ function renderTopbar() {
         <span class="badge">${workingCount(agents)}</span>
       </button>
       <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">${ICONS.info}</button>
+      <button class="icon-btn lang-btn" id="toggle-lang" type="button" aria-label="${getLang() === 'en' ? '切换中文' : 'Switch to English'}">${getLang() === 'en' ? '中' : 'EN'}</button>
       <button class="icon-btn" id="toggle-theme" type="button" aria-label="${themeLabel}" title="${themeLabel}">
         ${themeIcon}
       </button>
@@ -332,6 +334,7 @@ function renderTabbar() {
       ${alert ? '<span class="badge-dot"></span>' : ''}
     </button>`;
   }).join('');
+  translateDOM(tabbarEl);
 }
 
 // render: crew panel
@@ -401,6 +404,7 @@ function renderCrew() {
     </div>`;
   const body = crewEl.querySelector('.crew-body');
   if (body) body.scrollTop = scrollTop;
+  translateDOM(crewEl);
 }
 
 // render: page dispatch
@@ -438,6 +442,7 @@ function renderPage() {
     }
   }
   hydrate();
+  translateDOM(pageEl);
 }
 
 function renderChrome() {
@@ -445,6 +450,8 @@ function renderChrome() {
   renderTopbar();
   renderTabbar();
   document.getElementById('app').dataset.route = state.route;
+  translateDOM(railEl);
+  translateDOM(topbarEl);
 }
 
 function renderAll() {
@@ -644,30 +651,35 @@ function pauseBanner(p) {
 
 function humanStatus(p) {
   const next = p.nextRetryAt ? formatClock(p.nextRetryAt) : '';
+  const en = getLang() === 'en';
   if (p.status === 'PAUSED') {
-    if (p.pausedReason === 'USER') return '任务已暂停，进度已保存，随时可以继续。';
-    if (isQuotaPause(p)) return `这轮免费额度用完了，${next ? next + ' ' : ''}自动再试；也可以换模型或立即重试。`;
-    return `这轮没有成功，${next ? next + ' ' : ''}会自动再试；也可以点“立即重试”或去我的页换一个连接。`;
+    if (p.pausedReason === 'USER') return en ? 'Paused. Progress saved; resume anytime.' : '任务已暂停，进度已保存，随时可以继续。';
+    if (isQuotaPause(p)) return en ? `Free quota used up; auto-retry${next ? ' at ' + next : ''}. Or switch model or retry now.` : `这轮免费额度用完了，${next ? next + ' ' : ''}自动再试；也可以换模型或立即重试。`;
+    return en ? `This round failed; auto-retry${next ? ' at ' + next : ''}. Or retry now in Profile.` : `这轮没有成功，${next ? next + ' ' : ''}会自动再试；也可以点“立即重试”或去我的页换一个连接。`;
   }
   if (p.status === 'AWAITING_USER') {
-    if (p.awaitReason === 'escalate') return '同一个问题连续两轮没修好，需要你定个方向。';
-    return `需要你选一个版本 · 两个都能用，差别在${p.decisions?.[0]?.topic || '节奏'}。`;
+    if (p.awaitReason === 'escalate') return en ? 'Same issue twice. Pick a direction.' : '同一个问题连续两轮没修好，需要你定个方向。';
+    return en ? `Pick a version · both work; the difference is ${p.decisions?.[0]?.topic || 'pacing'}.` : `需要你选一个版本 · 两个都能用，差别在${p.decisions?.[0]?.topic || '节奏'}。`;
   }
   if (p.status === 'DELIVERED') {
     const pass = p.report?.passed;
-    return `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
+    return en
+      ? `Done. ${pass ? 'All 12 checks passed' : 'Delivered as chosen'} · open it.`
+      : `做好了，${pass ? '12 项检查全部通过' : '已按你的选择交付'} · 点开就能用。`;
   }
-  if (p.phase === 'intake' || p.phase === 'plan') return '统筹者和策划者在拆这句话：定 4 个场景、3 轮上限和 4 条完成标准 · 约 20 秒。';
-  if (p.status === 'REVIEWING') return `检查者在检查第 ${p.round} 轮：逐条看检查结果，不靠感觉 · 约 30 秒出结果。`;
+  if (p.phase === 'intake' || p.phase === 'plan') return en ? 'Lead and Planner are breaking it down: 4 scenes, 3 rounds, 4 criteria · ~20s.' : '统筹者和策划者在拆这句话：定 4 个场景、3 轮上限和 4 条完成标准 · 约 20 秒。';
+  if (p.status === 'REVIEWING') return en ? `Checker is reviewing ${roundLabel(p)} · ~30s.` : `检查者在检查第 ${p.round} 轮：逐条看检查结果，不靠感觉 · 约 30 秒出结果。`;
   if (p.status === 'REWORKING') {
     const why = (p.failedIds || []).slice(0, 2).map((id) => {
       const f = (p.report?.findings || []).find((x) => x.id === id);
       return f ? `${id} ${f.check}` : id;
-    }).join('、');
-    return `第 ${p.round} 轮修正：编程者在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
+    }).join(en ? ', ' : '、');
+    return en
+      ? `${roundLabel(p)} fixes: Builder is fixing ${why ? why : 'what failed last round'} · recheck in ~40s.`
+      : `第 ${p.round} 轮修正：编程者在改${why ? '「' + why + '」' : '上一轮没过的项'} · 约 40 秒后复检。`;
   }
-  if (p.status === 'BUILDING') return `编程者在${roundLabel(p)}制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
-  return '统筹者在拆这句话：先定 3 轮上限，再交给策划者写完成标准 · 约 20 秒。';
+  if (p.status === 'BUILDING') return en ? `Builder is on ${roundLabel(p)} · tests first, Checker in 40–60s.` : `编程者在${roundLabel(p)}制作 · 先自己跑一遍，约 40–60 秒后交给检查者。`;
+  return en ? 'Lead is breaking it down: 3 rounds, 4 criteria · ~20s.' : '统筹者在拆这句话：先定 3 轮上限，再交给策划者写完成标准 · 约 20 秒。';
 }
 
 function stageDetailHtml(p) {
@@ -756,7 +768,6 @@ function recordsHtml(p) {
         </div>
       </div>
       ${state.view === 'timeline' ? timelineHtml(p) : statusTableHtml(p)}
-      ${p ? `<div class="records-danger"><button class="danger-link" id="delete-task" type="button">删除这个任务</button><span>删除后本地和云端都会移除，不能恢复</span></div>` : ''}
     </div>` : ''}
   </section>`;
 }
@@ -970,6 +981,7 @@ function buildHtml() {
     </div>
     ${deliverActions(p)}
     ${taskControls(p)}
+    <div class="project-danger-row"><button class="btn small danger-solid" id="delete-task" type="button"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5"/></svg>${tr('删除任务', 'Delete task')}</button><span>${tr('删除后本地和云端都会移除，不能恢复', 'Removes it locally and from the cloud. Cannot undo.')}</span></div>
   </div>
   ${pauseBanner(p)}
   ${awaiting ? `<section class="section act-section await-focus">
@@ -1198,77 +1210,49 @@ function markGuideSeen() {
 }
 
 function guideHtml() {
+  const en = state.lang === 'en';
+  const steps = en ? [
+    { no: '01', title: 'One line to start', body: 'Say what and for whom. Pick a tag and style, then start. Projects live in the left rail—or Profile on mobile.', fig: 'home', cap: 'Home: one input, projects in the rail.' },
+    { no: '02', title: 'Four stages, automatic', body: 'Plan → Build → Check → Ship. It stops only when it needs you.', fig: 'project', cap: 'Project: stage, round and team in one view.' },
+    { no: '03', title: 'Pick one option', body: 'Two viable paths. Choose one, then the team continues.', fig: 'decision', cap: 'Decision: pick both to continue.' },
+    { no: '04', title: 'Every handoff is logged', body: 'See who gave what to whom, latest first.' },
+    { no: '05', title: 'Chat changes the build', body: 'Message the team; new requirements join the next round.', fig: 'chat', cap: 'Chat: real replies, real changes.' },
+    { no: '06', title: 'Open, export, share, redo', body: 'Open or export the result, share it, or run another version. Undo within 10 minutes.' },
+    { no: '07', title: 'Account, theme, history', body: 'Projects follow your account. Theme switches instantly, no toast. History: left rail on desktop, Profile on mobile.', fig: 'profile', cap: 'Profile: account, theme, service.' },
+  ] : [
+    { no: '01', title: '一句话开工', body: '写清做什么、给谁。选标签和风格，开始制作。历史项目在左栏；手机在“我的”。', fig: 'home', cap: '首页：一个输入框，历史在左栏。' },
+    { no: '02', title: '四阶段自动走', body: '明确 → 制作 → 检查 → 交付。只在“需要你确认”时停下。', fig: 'project', cap: '项目页：阶段、轮次、团队一屏看清。' },
+    { no: '03', title: '二选一就继续', body: '团队给两条可行方案，选一个就往下走。', fig: 'decision', cap: '确认卡：两项都选后继续。' },
+    { no: '04', title: '交接有记录', body: '每次交接记录谁给谁、交了什么，最新在上。' },
+    { no: '05', title: '聊天能改需求', body: '对团队说一句，新要求会进入下一轮。', fig: 'chat', cap: '聊天：真回复，也能改需求。' },
+    { no: '06', title: '成品可带走', body: '打开、导出、分享、再做一版；10 分钟内可撤回。' },
+    { no: '07', title: '账号、外观、历史', body: '登录后项目跟账号走。外观即切即生效，无弹窗。历史：桌面左栏，手机这里。', fig: 'profile', cap: '我的页：账号、外观、服务。' },
+  ];
   return `<div class="guide-scrim" data-guide-close></div>
   <div class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
     <div class="guide-head">
       <div>
-        <div class="eyebrow">FORGECREW · 快速上手</div>
-        <h2 id="guide-title">两分钟看完，随时可以关</h2>
-        <p>这里只写真正会用到的操作。看不完也没关系，截图可以点开放大，右上角 <b>?</b> 随时再打开。</p>
+        <div class="eyebrow">FORGECREW · ${en ? 'QUICK START' : '快速上手'}</div>
+        <h2 id="guide-title">${en ? 'Two minutes. Close anytime.' : '两分钟，随时可关'}</h2>
+        <p>${en ? 'Only what you need.' : '只写会用到的，截图可点开放大。'}</p>
       </div>
-      <button class="guide-close" type="button" data-guide-close aria-label="关闭说明">×</button>
+      <button class="guide-close" type="button" data-guide-close aria-label="${en ? 'Close guide' : '关闭说明'}">×</button>
     </div>
     <div class="guide-body">
-      <section class="guide-step">
-        <span class="guide-no">01</span>
+      ${steps.map((st) => `<section class="guide-step">
+        <span class="guide-no">${st.no}</span>
         <div>
-          <h3>写一句想法，选好风格就能开工</h3>
-          <p>在首页写清楚“做什么、给谁用、最想要的效果”。标签决定页面骨架，风格决定气质；高级选项可以补上不要什么、参考感觉。点“让团队开工”，五个角色开始接手。以往项目固定在左侧“项目历史”里，点一下就能切回；手机上在“我的”页查看。</p>
-          <figure><a href="/assets/guide/home.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/home.webp" alt="首页新建项目与左侧项目历史" loading="lazy"></a><figcaption>首页：只留新建入口，项目历史常驻左侧栏。</figcaption></figure>
+          <h3>${st.title}</h3>
+          <p>${st.body}</p>
+          ${st.fig && !en ? `<figure><a href="/assets/guide/${st.fig}.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/${st.fig}.webp" alt="${st.cap}" loading="lazy"></a><figcaption>${st.cap}</figcaption></figure>` : ''}
         </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">02</span>
-        <div>
-          <h3>四个阶段会自动往下走</h3>
-          <p>明确 → 制作 → 检查 → 交付。顶部会显示当前阶段、轮次和成员状态。中途可以暂停、继续；不想做了可以删除。只有到了“需要你确认”，才真的需要你出手。</p>
-          <figure><a href="/assets/guide/project.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/project.webp" alt="项目页四个阶段与团队状态" loading="lazy"></a><figcaption>项目页：阶段、进度、团队状态一眼看清。</figcaption></figure>
-        </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">03</span>
-        <div>
-          <h3>需要你确认时，二选一就行</h3>
-          <p>团队会把两条都能走通的方案摆出来，写清代价和适用场景。选一个，点确认，团队继续。两项都选过之后按钮才能继续，避免漏选。</p>
-          <figure><a href="/assets/guide/decision.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/decision.webp" alt="需要你确认时的两个方案" loading="lazy"></a><figcaption>确认卡：两项都拍板后才会放行。</figcaption></figure>
-        </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">04</span>
-        <div>
-          <h3>团队交接记录，能查每一步是谁做的</h3>
-          <p>每次角色交接都会留下一条：谁交给谁、交付了什么、为什么。最新的一条在最上面，最多保留最近 6 条。它不是角色介绍，而是这次项目真实发生过的事。</p>
-        </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">05</span>
-        <div>
-          <h3>聊天不是摆设，可以直接改需求</h3>
-          <p>在项目页底部对团队说一句话，统筹者会真的读项目进度再回复。如果你在提新要求，它会自动记成一条“要求”，下一轮制作会带上；已交付的项目会多出一个“按新要求再做一版”的按钮。</p>
-          <figure><a href="/assets/guide/chat.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/chat.webp" alt="团队聊天真实回复与新要求" loading="lazy"></a><figcaption>聊天：真回复，也能把新要求写进下一轮。</figcaption></figure>
-        </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">06</span>
-        <div>
-          <h3>成品能打开、导出、分享，也能回到旧版</h3>
-          <p>交付后可以全屏打开成品、导出 HTML、复制分享链接，或者“再做一版”。10 分钟内还能撤回确认，重新选方案。历史版本区里，每个旧版本都有“回到这版”，二次确认后会把项目切回那一版。</p>
-        </div>
-      </section>
-      <section class="guide-step">
-        <span class="guide-no">07</span>
-        <div>
-          <h3>账号、外观和项目历史</h3>
-          <p>登录后项目跟着账号走。“我的”页可以切换跟随系统 / 深色 / 亮色，打开确认通知，查看今日调用；切换外观会立即生效，不再弹提示。项目历史在桌面左侧栏常驻，手机端在“我的”页查看，点条目就能切回。</p>
-          <figure><a href="/assets/guide/profile.webp" target="_blank" rel="noreferrer"><img src="/assets/guide/profile.webp" alt="我的页账号、外观与项目历史" loading="lazy"></a><figcaption>我的页：账号、外观、服务连接；项目历史在左栏，手机在此查看。</figcaption></figure>
-        </div>
-      </section>
+      </section>`).join('')}
     </div>
     <div class="guide-foot">
-      <span>首次登录会自动打开一次；关掉后不再打扰。</span>
+      <span>${en ? 'Opens once on first sign-in.' : '首次登录自动打开一次。'}</span>
       <div class="guide-actions">
-        <button class="btn" type="button" data-guide-close>先跳过</button>
-        <button class="btn primary" type="button" data-guide-close>开始使用</button>
+        <button class="btn" type="button" data-guide-close>${en ? 'Skip' : '跳过'}</button>
+        <button class="btn primary" type="button" data-guide-close>${en ? 'Start' : '开始使用'}</button>
       </div>
     </div>
   </div>`;
@@ -1339,23 +1323,23 @@ function profileHtml() {
         <div class="account-foot">
           ${state.user
             ? `项目自动同步 · ${state.syncing ? '正在同步…' : state.cloudSavedAt ? '上次同步 ' + rel(state.cloudSavedAt) : '等待首次同步'}${state.cloudError ? ' · <span class="warn">' + esc(state.cloudError) + '</span>' : ''}`
-            : '未登录 · 数据只保存在这台浏览器里。'}
+            : '未登录 · 只存在这台浏览器。'}
         </div>
       </div>
 
       <div class="panel">
         <h3>外观</h3>
-        <div class="desc">默认跟随系统，也可固定亮色或深色。</div>
+        <div class="desc">跟随系统，或固定亮/暗。</div>
         <div class="seg-full" role="group" aria-label="外观">
           ${[['system', '跟随系统'], ['light', '亮色'], ['dark', '深色']].map(([key, label]) => `<button type="button" data-theme-set="${key}" aria-selected="${state.themeUser === key}">${label}</button>`).join('')}
         </div>
         <div class="panel-sect">
           <div class="setting-row">
-            <div class="txt"><b>团队敬礼</b><span>开工与交付时，5 名成员各敬一个礼</span></div>
+            <div class="txt"><b>团队敬礼</b><span>开工与交付时敬礼</span></div>
             <div class="side"><button class="switch" data-toggle-follow type="button" aria-checked="${state.autofollow}" aria-label="自动跟随"></button></div>
           </div>
           <div class="setting-row">
-            <div class="txt"><b>确认通知</b><span>到达需要你决定或交付时提醒你</span></div>
+            <div class="txt"><b>确认通知</b><span>需要你时提醒</span></div>
             <div class="side"><button class="switch" id="notify-toggle" type="button" aria-checked="false" aria-label="确认通知"></button></div>
           </div>
         </div>
@@ -1363,7 +1347,7 @@ function profileHtml() {
 
       <div class="panel">
         <h3>制作服务连接</h3>
-        <div class="desc">自动选择可用通道，服务端统一转发。</div>
+        <div class="desc">自动选通道，服务端转发。</div>
         <div class="channel-row">
           <span class="dot ${hb.tone === 'fail' ? 'err' : hb.tone === 'wait' ? 'wait' : 'ok'}"></span>
           <div class="txt"><b>${COPY.channel}</b><span>${esc(hb.text)}</span></div>
@@ -1371,14 +1355,14 @@ function profileHtml() {
         </div>
         <div class="panel-sect">
           <div class="setting-row">
-            <div class="txt"><b>串行作业</b><span>一次只接一个想法，保证每一步都做到位</span></div>
+            <div class="txt"><b>串行作业</b><span>一次一个想法，每步做到位</span></div>
             <div class="side"><button class="switch on-locked" type="button" aria-checked="true" disabled aria-label="串行作业"></button></div>
           </div>
         </div>
         <div class="channel-foot">
           ${reason ? `上次暂停原因：${esc(reason.long)} · ${next}<br>` : ''}
-          今日调用 ${callsToday()} 次 · 同一时间只接一个想法<br>
-          <span style="color:var(--text-3)">07:00–23:59 每 15 分钟保活，冷启动通常 < 30 秒。</span>
+          今日 ${callsToday()} 次 · 一次一个<br>
+          <span style="color:var(--text-3)">每 15 分钟保活，冷启动 < 30 秒。</span>
         </div>
       </div>
     </div>
@@ -1386,7 +1370,7 @@ function profileHtml() {
     <div>
       <div class="panel profile-history-panel">
         <div class="section-head" style="margin-bottom:10px"><h3>项目历史</h3><span class="meta" style="margin-left:auto">${state.projects.length} 个</span></div>
-        <div class="history-moved">项目历史已移到左侧栏。点任意条目即可切回项目；手机端在这里查看。</div>
+        <div class="history-moved">历史已移到左栏；手机看这里。</div>
         <div class="history-body">
           <div class="history-tabs segmented" role="tablist">
             ${['全部', '进行中', '已交付'].map((t, i) => `<button type="button" aria-selected="${i === 0}" style="pointer-events:none">${t}</button>`).join('')}
@@ -1394,7 +1378,7 @@ function profileHtml() {
           ${historyRowsHtml()}
         </div>
         <div class="danger-zone">
-          <span class="txt">清空想法、日志与成品，无法恢复。</span>
+          <span class="txt">清空想法、日志与成品，不能恢复。</span>
           <span class="side"><button class="btn small ghost-danger" id="clear-start" type="button">清空数据</button></span>
         </div>
         <div id="clear-confirm-wrap"></div>
@@ -1405,7 +1389,7 @@ function profileHtml() {
           <div><b>${BRAND.name} · ${BRAND.version}</b><span>Agent crew · idea to acceptance</span></div>
           <span class="logo-mini">${LOGO_SVG}</span>
         </div>
-        <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · 右上角 ? 也可以</span></div>
+        <div class="about-row"><span>使用说明</span><span class="side"><button class="link-btn" type="button" data-open-guide>打开两分钟说明</button> · ${tr('右上角 ? 也可以', 'or ? top right')}</span></div>
         <div class="about-row"><span>设计语言</span><span class="side"><span class="chip-mini">视觉 v3</span> 亮暗双态 · 石墨 / 纸白 · iOS 26 手感</span></div>
         <div class="about-row"><span>生成服务</span><span class="side">自动选择可用连接 · ${API.base() ? '跨域代理' : '同源代理'}</span></div>
       </div>
@@ -1640,6 +1624,16 @@ document.addEventListener('click', (ev) => {
     renderPage();
     hydrate();
     toast(`已回到第 ${v.round} 轮这一版`);
+    return;
+  }
+
+  const langBtn = ev.target.closest('#toggle-lang');
+  if (langBtn) {
+    const next = getLang() === 'en' ? 'zh' : 'en';
+    state.lang = next;
+    try { localStorage.setItem('fc-lang', next); } catch (e) {}
+    setLang(next);
+    renderAll();
     return;
   }
 
@@ -2452,7 +2446,7 @@ async function initAccount() {
 function toast(message, kind = '') {
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
-  el.textContent = message;
+  el.textContent = translateText(message);
   toastRoot.appendChild(el);
   while (toastRoot.children.length > 3) toastRoot.firstChild.remove();
   setTimeout(() => el.remove(), 3500);
@@ -2534,6 +2528,8 @@ document.addEventListener('submit', (ev) => {
 function boot() {
   loadTheme();
   loadState();
+  setLang(state.lang);
+  startI18n();
   try { state.tag = localStorage.getItem('fc-tag') || '工具'; } catch (e) {}
   const pathRoute = pathToRoute(location.pathname);
   const hashRoute = hashToRoute();
@@ -2550,6 +2546,7 @@ function boot() {
   updateRouteFromLocation();
   hydrate();
   initAccount();
+  requestAnimationFrame(() => translateDOM(document.body));
 
   // 计时：状态台实时
   setInterval(() => {

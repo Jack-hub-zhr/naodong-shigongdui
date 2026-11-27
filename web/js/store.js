@@ -1,6 +1,7 @@
 // project store: state machine, selectors, persistence
 
 import { ROLES } from './config.js';
+import { getLang } from './i18n.js';
 
 export const KEYS = {
   themeUser: 'fc-theme-user',
@@ -47,8 +48,14 @@ export function stageOf(status) {
   }
 }
 
+const STATUS_EN = {
+  PENDING: 'Queued', BUILDING: 'Building', REVIEWING: 'Checking',
+  AWAITING_USER: 'Needs you', REWORKING: 'Fixing', DELIVERED: 'Delivered', PAUSED: 'Paused',
+};
+
 export function badgeOf(status) {
-  return STATUS[status] || STATUS.PENDING;
+  const zh = STATUS[status] || STATUS.PENDING;
+  return getLang() === 'en' ? (STATUS_EN[status] || zh) : zh;
 }
 
 /** 用运行阶段而不是 status 猜阶段，保证标题、阶段条、成员卡同源。 */
@@ -62,7 +69,8 @@ export function projectStage(p) {
 }
 
 export function roundLabel(p) {
-  return p && p.round > 0 ? `第 ${p.round} 轮` : '准备中';
+  if (!p || !(p.round > 0)) return getLang() === 'en' ? 'Preparing' : '准备中';
+  return getLang() === 'en' ? `Round ${p.round}` : `第 ${p.round} 轮`;
 }
 
 export const STAGES = [
@@ -88,6 +96,7 @@ export const state = {
   themeUser: 'system',
   lastSavedAt: 0,
   user: null,
+  lang: 'zh',
   authChecked: false,
   syncing: false,
   cloudSavedAt: 0,
@@ -260,6 +269,7 @@ export function loadState() {
   state.project = read(KEYS.project, null);
   state.logs = read(KEYS.logs, []) || [];
   state.view = read(KEYS.view, 'timeline') === 'table' ? 'table' : 'timeline';
+  try { state.lang = localStorage.getItem('fc-lang') === 'en' ? 'en' : 'zh'; } catch (e) { state.lang = 'zh'; }
   state.autofollow = read('fc-autofollow', true) !== false;
   state.draft = read(KEYS.draft, '') || '';
   state.style = read('fc-style', 'product') || 'product';
@@ -577,12 +587,13 @@ export function pauseReasonText(p) {
 // time format
 export function formatRelative(ts, now = Date.now()) {
   if (!ts) return '—';
+  const en = getLang() === 'en';
   const diff = Math.max(0, now - ts);
-  if (diff < 6000) return '刚刚';
-  if (diff < 60_000) return `${Math.floor(diff / 1000)} 秒前`;
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)} 小时前`;
-  return `${Math.floor(diff / 86_400_000)} 天前`;
+  if (diff < 6000) return en ? 'just now' : '刚刚';
+  if (diff < 60_000) return en ? `${Math.floor(diff / 1000)}s ago` : `${Math.floor(diff / 1000)} 秒前`;
+  if (diff < 3600_000) return en ? `${Math.floor(diff / 60_000)}m ago` : `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return en ? `${Math.floor(diff / 3600_000)}h ago` : `${Math.floor(diff / 3600_000)} 小时前`;
+  return en ? `${Math.floor(diff / 86_400_000)}d ago` : `${Math.floor(diff / 86_400_000)} 天前`;
 }
 
 export function formatClock(ts) {
@@ -606,8 +617,9 @@ export function formatDateTime(ts) {
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
   const yesterday = new Date(now.getTime() - 86_400_000).toDateString() === d.toDateString();
-  if (sameDay) return `今天 ${p(d.getHours())}:${p(d.getMinutes())}`;
-  if (yesterday) return `昨天 ${p(d.getHours())}:${p(d.getMinutes())}`;
+  const en = getLang() === 'en';
+  if (sameDay) return en ? `Today ${p(d.getHours())}:${p(d.getMinutes())}` : `今天 ${p(d.getHours())}:${p(d.getMinutes())}`;
+  if (yesterday) return en ? `Yesterday ${p(d.getHours())}:${p(d.getMinutes())}` : `昨天 ${p(d.getHours())}:${p(d.getMinutes())}`;
   return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
