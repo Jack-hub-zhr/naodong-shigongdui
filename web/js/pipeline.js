@@ -127,7 +127,7 @@ export function scriptUser(p, html) {
 完成标准：
 ${(spec.acceptance || []).map((t, i) => `A${i + 1}. ${t}`).join('\n')}
 页面 HTML（只读，用于找 id）：
-${String(html).slice(0, 5200)}
+${String(html).slice(0, 7600)}
 
 请输出实现全部交互的 <script>，必须让页面真正可玩/可用。`;
 }
@@ -629,18 +629,37 @@ export async function advance(p, deps) {
       case 'build': {
         deps.log('BUILDER', `开始第 ${p.round} 轮产出`);
         startAgent(p, 'builder', p.reworkOrder ? 20 : 8);
+        const shellSystem = `${builderSystem()}\n\n本次调用例外（优先执行）：只输出 HTML + CSS 骨架。不要写任何 JS，<script id="fc-app"></script> 必须为空且闭合；交互脚本下一步单独生成。整份骨架控制在 6KB 以内。`;
+        const shellUser = (compact) => `${builderUser(p, { previous: p.artifact?.html })}\n\n本次只输出骨架：head + CSS + body 结构，<script id="fc-app"></script> 留空。不要输出 JS、解释或代码围栏。${compact ? '\n压缩版：CSS 控制在 55–70 行，整份不超过 4.5KB；先保证完整闭合，再删装饰。' : '\nCSS 控制在 70–90 行，整份不超过 6KB；先保证完整闭合，再接视觉装饰。'}`;
         let res;
         try {
           res = await callModel(p, deps, {
             role: 'BUILDER',
-            system: builderSystem(),
-            user: builderUser(p, { previous: p.artifact?.html }),
+            system: shellSystem,
+            user: shellUser(false),
             temperature: 0.7,
-            maxTokens: 5400,
+            maxTokens: 5000,
           });
         } catch (e) {
-          pause(p, e, deps);
-          return 'paused';
+          // DeepSeek 在长输出上偶发空响应/截断：缩小骨架再试一次，不直接停任务。
+          if (e.kind && e.kind !== 'QUOTA') {
+            try {
+              await new Promise((r) => setTimeout(r, 1200));
+              res = await callModel(p, deps, {
+                role: 'BUILDER',
+                system: shellSystem,
+                user: shellUser(true),
+                temperature: 0.6,
+                maxTokens: 4600,
+              });
+            } catch (e2) {
+              pause(p, e2, deps);
+              return 'paused';
+            }
+          } else {
+            pause(p, e, deps);
+            return 'paused';
+          }
         }
         let html = ensureClosed(stripCode(res.text));
         if (!html || !/<body/i.test(html)) {
@@ -651,26 +670,21 @@ export async function advance(p, deps) {
           deps.save();
           continue;
         }
-        const appScript = html.match(/<script[^>]*id=["']fc-app["'][^>]*>([\s\S]*?)<\/script>/i);
-        const inlineReady = Boolean(appScript && appScript[1].trim().length > 20);
-        if (inlineReady) {
-          html = applyBaseStyle(html, p.style);
-        } else {
-          let jsRes;
-          try {
-            jsRes = await callModel(p, deps, {
-              role: 'BUILDER',
-              system: scriptSystem(),
-              user: scriptUser(p, html),
-              temperature: 0.5,
-              maxTokens: 1600,
-            });
-          } catch (e) {
-            pause(p, e, deps);
-            return 'paused';
-          }
-          html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)), p.style);
+        // 骨架与交互分开生成：每次输出都落在 DeepSeek 的稳定预算内。
+        let jsRes;
+        try {
+          jsRes = await callModel(p, deps, {
+            role: 'BUILDER',
+            system: scriptSystem(),
+            user: scriptUser(p, html),
+            temperature: 0.5,
+            maxTokens: 2200,
+          });
+        } catch (e) {
+          pause(p, e, deps);
+          return 'paused';
         }
+        html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)), p.style);
         p.artifact = {
           round: p.round,
           title: p.title,

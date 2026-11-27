@@ -5,6 +5,7 @@ import { getLang } from './i18n.js';
 
 export const KEYS = {
   themeUser: 'fc-theme-user',
+  themeExplicit: 'fc-theme-explicit',
   project: 'fc-project',
   logs: 'fc-logs',
   route: 'fc-route',
@@ -238,7 +239,10 @@ function compactProjects(list) {
 
 export function loadTheme() {
   try {
-    const user = localStorage.getItem(KEYS.themeUser) || 'system';
+    let user = localStorage.getItem(KEYS.themeUser) || 'system';
+    // 旧版本曾把首次访问写成 light；没有显式选择过时，回到跟随系统。
+    const explicit = localStorage.getItem(KEYS.themeExplicit) === '1';
+    if (!explicit && user === 'light') user = 'system';
     state.themeUser = ['system', 'dark', 'light'].includes(user) ? user : 'system';
   } catch (e) {
     state.themeUser = 'system';
@@ -261,6 +265,7 @@ export function applyTheme() {
 
 export function setThemeUser(user) {
   state.themeUser = user;
+  try { localStorage.setItem(KEYS.themeExplicit, '1'); } catch (e) {}
   applyTheme();
 }
 
