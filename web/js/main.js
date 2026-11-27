@@ -559,10 +559,10 @@ function timelineHtml(p) {
     </div>
     ${rounds.map((round) => {
       const logs = groups.get(round);
-      const first = logs[0].at || now;
-      const last = logs[logs.length - 1].at || now;
+      const first = logs[0].ts || now;
+      const last = logs[logs.length - 1].ts || now;
       const live = round === p.round && ['BUILDING', 'REVIEWING', 'REWORKING'].includes(p.status);
-      const dur = (live ? now : last) - (round === p.round ? (p.roundStartedAt || first) : first);
+      const dur = Math.max(0, (live ? now : last) - (round === p.round ? (p.roundStartedAt || first) : first));
       const result = live ? RESULT_PILL.run : (p.report?.round === round ? (p.report.passed ? RESULT_PILL.pass : RESULT_PILL.fail) : null);
       return `<div class="round-group">
         <div class="round-head">

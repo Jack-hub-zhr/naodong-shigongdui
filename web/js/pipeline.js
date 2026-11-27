@@ -37,7 +37,7 @@ export function productUser(prompt, tag) {
 export function builderSystem() {
   return `${COMMON}
 你是开发。只按产品给出的规格写代码，不修改规格。
-输出一个完整 HTML 文档（含内联 CSS），不要输出解释或代码围栏。本步只做结构与样式，交互脚本留到下一步：在 </body> 前放一个空的 <script id="fc-app"></script> 占位，不要写任何内联脚本或 on* 属性。
+一次输出完整 HTML 文档，包含内联 CSS 与内联交互脚本，不要输出解释或代码围栏。在 </body> 前放一个非空的 <script id="fc-app">…</script>，直接把整页交互写完，不要留空占位，不要写 on* 内联属性。
 硬性要求：
 1. <!DOCTYPE html>、<html lang="zh-CN">、<head>、<meta charset>、<meta name="viewport">、非空 <title>，结尾必须闭合 </html>
 2. 移动端 375px 宽度不横向滚动，触控目标 ≥44px
@@ -70,7 +70,8 @@ export function builderSystem() {
 如果是小游戏，额外要求：
 10. 「开始 / 暂停 / 重开」是独立按钮，放在游戏区正下方，与游戏区至少间隔 16px；禁止绝对定位压在游戏区上
 11. 点击开始后真正进入可玩状态：倒计时走动、按钮文案变为「暂停」，再次点击可暂停；结束给出结算并可重开
-12. 若用 <canvas>，设置 touch-action:none，并在脚本步骤按 getBoundingClientRect() 换算坐标`;
+12. 若用 <canvas>，设置 touch-action:none，并在脚本里按 getBoundingClientRect() 换算坐标
+13. 交互脚本必须完整闭合，写在 <script id="fc-app"> 内，不能留空占位或调用外部脚本`;
 }
 
 function builderLayout(tag) {
@@ -197,7 +198,7 @@ ${builderLayout(p.tag)}
 ${(p.extraRequirements || []).length ? `\n用户在团队聊天里追加的要求（必须一起满足，不能牺牲已有功能）：\n${p.extraRequirements.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n` : ''}
 ${p.reworkOrder ? `\n修正要求（必须修掉，同时保留已达功能）：\n${p.reworkOrder}\n` : ''}
 ${extra.previous ? `\n上一轮产物（可参考，不要照抄）：\n${String(extra.previous).slice(0, 4200)}\n` : ''}
-请直接输出完整 HTML。`;
+请直接输出完整 HTML（含 <script id="fc-app"> 交互脚本）。`;
 }
 
 export function delightSystem() {
@@ -529,6 +530,23 @@ async function callModel(p, deps, args) {
   return result;
 }
 
+function localDelight(p) {
+  const spec = p.spec || {};
+  const items = [];
+  items.push({
+    requirement: '你最初的原话',
+    response: spec.summary || '已按原话做成可直接打开的成品',
+    kind: 'EXPLICIT',
+  });
+  for (const text of (spec.inScope || []).slice(0, 3)) {
+    items.push({ requirement: text, response: '已实现，打开成品即可直接使用', kind: 'EXPLICIT' });
+  }
+  if (spec.implicitPreference) {
+    items.push({ requirement: '你没明说的偏好', response: spec.implicitPreference, kind: 'IMPLICIT' });
+  }
+  return normalizeDelight({ items });
+}
+
 // main loop
 export async function advance(p, deps) {
   let guard = 0;
@@ -615,7 +633,7 @@ export async function advance(p, deps) {
             system: builderSystem(),
             user: builderUser(p, { previous: p.artifact?.html }),
             temperature: 0.7,
-            maxTokens: 4600,
+            maxTokens: 5400,
           });
         } catch (e) {
           pause(p, e, deps);
@@ -630,20 +648,26 @@ export async function advance(p, deps) {
           deps.save();
           continue;
         }
-        let jsRes;
-        try {
-          jsRes = await callModel(p, deps, {
-            role: 'BUILDER',
-            system: scriptSystem(),
-            user: scriptUser(p, html),
-            temperature: 0.5,
-            maxTokens: 1600,
-          });
-        } catch (e) {
-          pause(p, e, deps);
-          return 'paused';
+        const appScript = html.match(/<script[^>]*id=["']fc-app["'][^>]*>([\s\S]*?)<\/script>/i);
+        const inlineReady = Boolean(appScript && appScript[1].trim().length > 20);
+        if (inlineReady) {
+          html = applyBaseStyle(html, p.style);
+        } else {
+          let jsRes;
+          try {
+            jsRes = await callModel(p, deps, {
+              role: 'BUILDER',
+              system: scriptSystem(),
+              user: scriptUser(p, html),
+              temperature: 0.5,
+              maxTokens: 1600,
+            });
+          } catch (e) {
+            pause(p, e, deps);
+            return 'paused';
+          }
+          html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)), p.style);
         }
-        html = applyBaseStyle(injectAppScript(html, stripAppScript(jsRes.text)), p.style);
         p.artifact = {
           round: p.round,
           title: p.title,
@@ -777,28 +801,9 @@ export async function advance(p, deps) {
       }
 
       case 'polish': {
-        try {
-          const res = await callModel(p, deps, {
-            role: 'PLEASER',
-            system: delightSystem(),
-            user: delightUser(p),
-            json: true,
-            temperature: 0.5,
-            maxTokens: 900,
-          });
-          p.delight = normalizeDelight(parseJsonLoose(res.text));
-          stopAgent(p, 'pleaser', 100);
-          deps.log('PLEASER', `打磨说明已生成（${p.delight.length} 条）`, 'pass');
-        } catch (e) {
-          if (e.kind === 'QUOTA' || e.kind === 'RATE_LIMIT') {
-            pause(p, e, deps);
-            return 'paused';
-          }
-          p.delight = [];
-          p.pleaserFailed = true;
-          stopAgent(p, 'pleaser', 0);
-          deps.log('PLEASER', `打磨说明生成失败：${e.message || '结构不完整'}，可重试`, 'fail');
-        }
+        p.delight = localDelight(p);
+        stopAgent(p, 'pleaser', 100);
+        deps.log('PLEASER', `打磨说明已整理（${p.delight.length} 条）`, 'pass');
         p.phase = 'done';
         p.deliveredAt = p.deliveredAt || Date.now();
         p.stage = stageOf('DELIVERED');

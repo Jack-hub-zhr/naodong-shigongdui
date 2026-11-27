@@ -626,7 +626,9 @@ export function projectPct(p) {
 
 export function totalElapsed(p, now = Date.now()) {
   if (!p) return 0;
-  const end = p.status === 'PAUSED' ? p.pausedAt || now : now;
+  const end = p.status === 'DELIVERED'
+    ? (p.deliveredAt || p.updatedAt || now)
+    : p.status === 'PAUSED' ? (p.pausedAt || now) : now;
   return Math.max(0, end - (p.startedAt || p.createdAt));
 }
 
