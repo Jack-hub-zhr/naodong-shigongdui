@@ -833,6 +833,7 @@ export async function advance(p, deps) {
         deps.save();
 
         if (report.passed) {
+          p.knownLimitations = [];
           if (!p.decisionsApplied) {
             p.phase = 'await';
             p.status = 'AWAITING_USER';

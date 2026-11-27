@@ -244,6 +244,7 @@ function checkAwaitTimer() {
     addLog(p, 'SYSTEM', '150 秒无人操作，自动采用 A 方案继续，可回来再做一版', 'wait');
   } else {
     p.escalate = false;
+    noteKnownLimitations(p);
     p.phase = 'deliver';
     addLog(p, 'SYSTEM', '150 秒无人操作，自动交付当前版本，未过项会标为已知限制', 'wait');
   }
@@ -1922,11 +1923,18 @@ function escalateRetry() {
   runEngine();
 }
 
+function noteKnownLimitations(p) {
+  const findings = (p?.report?.findings || []).filter((f) => !f.passed);
+  if (findings.length) p.knownLimitations = findings.map((f) => `${f.id} · ${f.check}：${f.detail}`);
+  else if (Array.isArray(p?.knownLimitations) && !findings.length) p.knownLimitations = [];
+}
+
 function escalateAccept() {
   const p = state.project;
   if (!p) return;
   p.escalate = false;
   p.awaitReason = null;
+  noteKnownLimitations(p);
   p.phase = 'deliver';
   addLog(p, 'USER', '先拿到当前成品，接受现状', 'wait');
   saveNow();
