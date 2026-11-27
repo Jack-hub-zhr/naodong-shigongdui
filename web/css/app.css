@@ -940,9 +940,14 @@ input, textarea { font: inherit; color: inherit; }
   .icon-btn { width: 44px; height: 44px; border-radius: 12px; }
   .crew-trigger { display: flex; width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 12px; position: relative; }
   .crew-trigger svg { width: 19px; height: 19px; opacity: 0.8; }
-  .crew-trigger .label, .crew-trigger .badge { display: none; }
+  .crew-trigger .label { display: none; }
+  .crew-trigger .badge { display: grid; position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; border-radius: 9px; box-shadow: 0 0 0 2px var(--surface); }
   .avatar { width: 44px; height: 44px; border-radius: 50%; font-size: 15px; }
-  .workspace { padding: 22px 16px calc(96px + env(safe-area-inset-bottom)); touch-action: pan-y; }
+  .workspace { padding: 22px 16px calc(112px + env(safe-area-inset-bottom)); touch-action: pan-y; }
+  .idea-grid { display: flex; flex-direction: column; }
+  .idea-grid > aside { order: -1; margin-bottom: 4px; }
+  .idea-grid > aside .aside-title,
+  .idea-grid > aside .team-mini { display: none; }
   .page { padding-bottom: 8px; }
   .eyebrow { font-size: 13px; margin-bottom: 12px; }
   .page-title { font-size: 32px; line-height: 1.26; letter-spacing: -0.026em; }
@@ -972,6 +977,16 @@ input, textarea { font: inherit; color: inherit; }
   }
   .recipe:last-child { border-bottom: 0; }
   .recipe .no { font-size: 13px; padding-top: 4px; }
+  .recipes {
+    display: flex; gap: 8px; overflow-x: auto; padding: 0; border: 0; background: transparent;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-bottom: 12px;
+  }
+  .recipes::-webkit-scrollbar { display: none; }
+  .recipes .recipe {
+    flex: 0 0 min(82%, 300px); min-height: 58px; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--surface); padding: 12px 14px; font-size: 13px;
+  }
+
   .flow-strip { margin-top: 14px; padding: 14px 16px; gap: 10px; align-items: stretch; flex-direction: column; }
   .flow-strip .live { display: none; }
   .flow-strip .txt { font-size: 13px; line-height: 1.65; }
@@ -1148,6 +1163,9 @@ input, textarea { font: inherit; color: inherit; }
 .stage-line.current li { font-size: 12px; color: var(--text-3); line-height: 1.7; }
 @media (max-width: 760px) { .stage-line { grid-template-columns: 36px minmax(0,1fr); } }
 .budget-note { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-3); max-width: 620px; }
+.known-limits { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.known-limits b { display: block; margin-bottom: 4px; color: var(--text); }
+.known-limits ul { margin: 0; padding-left: 18px; }
 
 /* ---------------- 账号 ---------------- */
 .account-btn {
@@ -2184,7 +2202,7 @@ body { background: var(--canvas); font-size: 15px; }
   .rail { display: none; }
   .main { border: 0; border-radius: 0; box-shadow: none; background: var(--canvas); }
   .topbar { flex-basis: 72px; height: 72px; padding: 0 18px; }
-  .workspace { padding: 22px 16px calc(96px + env(safe-area-inset-bottom)); }
+  .workspace { padding: 22px 16px calc(112px + env(safe-area-inset-bottom)); }
   .page { max-width: 100%; }
 }
 .profile-grid { grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 16px; }
@@ -2198,4 +2216,20 @@ body { background: var(--canvas); font-size: 15px; }
 
 @media (max-width: 760px) {
   input, textarea, select { font-size: 16px !important; touch-action: manipulation; }
+}
+
+/* 移动端收口：示例必须横排一行，且不被后续 iOS 18 规则覆盖成竖列 */
+@media (max-width: 760px) {
+  .idea-grid .recipe-list.recipes {
+    display: flex; flex-direction: row; gap: 8px; overflow-x: auto; overflow-y: hidden;
+    border: 0; border-radius: 0; background: transparent; padding: 0 0 2px;
+    margin: 0 0 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .idea-grid .recipe-list.recipes::-webkit-scrollbar { display: none; }
+  .idea-grid .recipe-list.recipes .recipe {
+    flex: 0 0 min(82%, 300px); width: auto; min-height: 58px;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--surface); padding: 12px 14px; font-size: 13px;
+  }
+  .idea-grid .recipe-list.recipes .recipe:last-child { border-bottom: 1px solid var(--line); }
 }

@@ -309,8 +309,9 @@ export function setRoute(route, { push = true } = {}) {
 // projects
 export function titleFromPrompt(prompt) {
   const clean = String(prompt).replace(/\s+/g, ' ').trim();
-  const cut = clean.replace(/^(帮我|请|给我|我想|想要|做一个|做个)/, '').trim();
-  return (cut || clean).slice(0, 42);
+  const cut = clean.replace(/^(帮我|请|给我|我想|想要|给|做一个|做个)/, '').trim();
+  const first = (cut || clean).split(/[，,。；;]/)[0].trim();
+  return (first || cut || clean).slice(0, 24);
 }
 
 export function newProject(prompt, tag) {

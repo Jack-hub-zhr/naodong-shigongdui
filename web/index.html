@@ -7,8 +7,18 @@
 <meta name="description" content="一句话说想法，五个人把它做出来；只在需要你决定时停一次。">
 <meta name="theme-color" content="#0A0A0B">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./tokens/motion.css?v=20261127a2">
-<link rel="stylesheet" href="./css/app.css?v=20261127a2">
+<link rel="stylesheet" href="./tokens/motion.css?v=20261127a3">
+<link rel="stylesheet" href="./css/app.css?v=20261127a3">
+<style>
+  #boot-screen{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:#0A0A0B;color:#F5F4F0;opacity:0;animation:bootIn .18s 600ms forwards;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif}
+  #boot-screen .box{text-align:center;padding:24px}
+  #boot-screen b{display:block;font-size:15px;letter-spacing:.02em}
+  #boot-screen span{display:block;font-size:12px;color:#8A9099;margin-top:10px}
+  #boot-screen i{display:inline-block;width:28px;height:28px;border:2px solid #3A3D44;border-top-color:#F2A02A;border-radius:50%;margin-bottom:14px;animation:bootSpin .9s linear infinite}
+  @keyframes bootIn{to{opacity:1}}
+  @keyframes bootSpin{to{transform:rotate(360deg)}}
+  @media (prefers-color-scheme:light){#boot-screen{background:#F5F4F0;color:#111214}#boot-screen span{color:#5B6068}#boot-screen i{border-color:#D8DBE0;border-top-color:#C98A13}}
+</style>
 <script>
   // 主题先于渲染，避免闪白
   (function () {
@@ -28,6 +38,7 @@
 </script>
 </head>
 <body>
+  <div id="boot-screen" role="status" aria-live="polite"><div class="box"><i></i><b>正在唤醒工作台</b><span>冷启动约 10 秒，马上就好</span></div></div>
   <div id="app" class="app rail-open crew-open" data-route="idea">
     <aside class="rail" id="rail" aria-label="主导航"></aside>
     <main class="main">
@@ -42,6 +53,6 @@
   <div id="overlay-root"></div>
   <div class="toasts" id="toast-root" aria-live="polite"></div>
   <div id="palette-root"></div>
-  <script type="module" src="./js/main.js?v=20261127a2"></script>
+  <script type="module" src="./js/main.js?v=20261127a3"></script>
 </body>
 </html>

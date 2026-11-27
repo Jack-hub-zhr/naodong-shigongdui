@@ -187,7 +187,6 @@ async function runEngine({ resume = false } = {}) {
 }
 
 function resumeIfNeeded() {
-  if (!state.user) return;
   const p = state.project;
   if (!p || p.autoRun === false) return;
   if (p.status === 'PAUSED') {
@@ -211,7 +210,6 @@ function resumeIfNeeded() {
 }
 
 function checkPauseTimer() {
-  if (!state.user) return;
   const p = state.project;
   if (!p || p.status !== 'PAUSED') return;
   if (p.nextRetryAt && Date.now() >= p.nextRetryAt) {
@@ -220,6 +218,38 @@ function checkPauseTimer() {
     saveNow();
     runEngine();
   }
+}
+
+let awaitListenersBound = false;
+
+function markAwaitActivity() {
+  const p = state.project;
+  if (!p || p.phase !== 'await' || ui.running || p.autoDecided) return;
+  p.awaitingAt = Date.now();
+}
+
+function checkAwaitTimer() {
+  const p = state.project;
+  if (!p || p.phase !== 'await' || ui.running) return;
+  if (!p.awaitingAt) { p.awaitingAt = p.updatedAt || Date.now(); return; }
+  if (Date.now() - p.awaitingAt < 150_000) return;
+  const reason = p.awaitReason;
+  p.autoDecided = true;
+  p.awaitReason = null;
+  p.awaitingAt = 0;
+  if (reason === 'decision' || (p.decisions || []).some((d) => !d.chosen)) {
+    (p.decisions || []).forEach((d) => { if (!d.chosen) d.chosen = 'A'; });
+    p.decisionsApplied = true;
+    p.phase = 'apply';
+    addLog(p, 'SYSTEM', '150 秒无人操作，自动采用 A 方案继续，可回来再做一版', 'wait');
+  } else {
+    p.escalate = false;
+    p.phase = 'deliver';
+    addLog(p, 'SYSTEM', '150 秒无人操作，自动交付当前版本，未过项会标为已知限制', 'wait');
+  }
+  saveNow();
+  renderAll();
+  runEngine();
 }
 
 // render: rail / topbar / tabs
@@ -302,7 +332,7 @@ function renderTopbar() {
       </button>
       <button class="crew-trigger" id="open-crew" type="button" aria-label="打开团队状态台">
         ${ICONS.sliders}<span class="label">团队</span>
-        <span class="badge">${workingCount(agents)}</span>
+        ${workingCount(agents) ? `<span class="badge">${workingCount(agents)}</span>` : ''}
       </button>
       <button class="icon-btn guide-btn" id="open-guide" type="button" aria-label="使用说明" title="使用说明">${ICONS.info}</button>
       <button class="icon-btn lang-btn" id="toggle-lang" type="button" aria-label="${getLang() === 'en' ? '切换中文' : 'Switch to English'}">${getLang() === 'en' ? '中' : 'EN'}</button>
@@ -488,7 +518,7 @@ function ideaHtml() {
   <h1 class="page-title idea-title">说一句，<br>五个人把它做出来。</h1>
   <p class="page-lead">${COPY.lead.idea}</p>
 
-  <div class="promise-row"><span class="dot ok"></span><span>预计 2–5 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>只会问你 1 次</span></div>
+  <div class="promise-row"><span class="dot ok"></span><span>预计 2–5 分钟</span><span>·</span><span>最多 3 轮</span><span>·</span><span>关键处最多问 3 次</span></div>
   <p class="budget-note">${COPY.budgetNote}</p>
 
   <div class="idea-grid">
@@ -974,6 +1004,8 @@ function buildHtml() {
       <span>${humanStatus(p)}</span>
     </div>
     ${p.status === 'DELIVERED' ? `<p class="budget-note">${COPY.budgetNote}</p>` : ''}
+    ${p.knownLimitations?.length ? `<div class="known-limits"><b>已知限制</b><ul>${p.knownLimitations.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    ${p.autoDecided && p.status === 'DELIVERED' ? '<p class="budget-note">本版为无人值守自动交付；回来后可以点“再做一版”调整。</p>' : ''}
     <div class="meta-row">
       <span><b>${roundLabel(p)}</b> / 最多 ${p.maxRound || 3} 轮</span>
       <span>更新 <b data-rel="${p.updatedAt}">${rel(p.updatedAt)}</b></span>
@@ -1311,7 +1343,7 @@ function profileHtml() {
           <div class="txt">
             <b>${state.user ? esc(state.user.name) : '还没有登录'}</b>
             <span>${state.user
-              ? esc(state.user.email)
+              ? '@' + esc(state.user.username || state.user.name || 'member')
               : '登录后项目跟着账号走。'}</span>
           </div>
           <span class="side">
@@ -2273,7 +2305,7 @@ function authModalHtml() {
     <div class="eyebrow">ACCOUNT · 可选</div>
     <h2 id="auth-title">${register ? '创建同步账号' : '登录以同步项目'}</h2>
     <p class="auth-lead">${register
-      ? '创建账号后，项目会跟着用户名同步到其他设备。'
+      ? '创建账号后，项目会跟着用户名同步到其他设备；不需要邮箱。'
       : '输入用户名和密码即可继续，项目会同步到其他设备。'}</p>
     <div class="auth-tabs segmented" role="tablist">
       <button type="button" data-auth-tab="login" aria-selected="${!register}">登录</button>
@@ -2283,10 +2315,7 @@ function authModalHtml() {
       <label class="auth-field"><span>用户名</span>
         <input name="username" type="text" maxlength="24" placeholder="${register ? '2–24 个字符，例如 Jack' : '输入用户名'}" autocomplete="username" required>
       </label>
-      ${register ? `
-      <label class="auth-field"><span>邮箱</span>
-        <input name="email" type="email" maxlength="120" placeholder="you@example.com" autocomplete="email" required>
-      </label>` : ''}
+
       <label class="auth-field"><span>密码</span>
         <input name="password" type="password" minlength="8" maxlength="128" placeholder="${register ? '至少 8 位' : '输入密码'}" autocomplete="${register ? 'new-password' : 'current-password'}" required>
       </label>
@@ -2352,15 +2381,16 @@ async function submitAuth(form) {
   const errorEl = form.querySelector('#auth-error');
   const data = new FormData(form);
   const username = String(data.get('username') || '').trim();
-  const email = String(data.get('email') || '').trim();
+  const email = String(data.get('email') || '').trim()
+    || `member-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}@local.forgecrew.app`;
   const password = String(data.get('password') || '');
 
   if (!username || !password) {
     if (errorEl) errorEl.textContent = '请填写用户名和密码';
     return;
   }
-  if (ui.authMode === 'register' && (!email || password.length < 8)) {
-    if (errorEl) errorEl.textContent = '注册需要邮箱，密码至少 8 位';
+  if (ui.authMode === 'register' && password.length < 8) {
+    if (errorEl) errorEl.textContent = '密码至少 8 位';
     return;
   }
 
@@ -2542,6 +2572,20 @@ function boot() {
   } else if (hashRoute) {
     state.route = hashRoute;
   }
+  if (state.route === 'build' && !state.project) {
+    state.route = 'idea';
+    const root = location.pathname.endsWith('/')
+      ? location.pathname
+      : location.pathname.slice(0, location.pathname.lastIndexOf('/') + 1);
+    history.replaceState({ route: 'idea' }, '', root + '#/idea');
+  }
+  document.getElementById('boot-screen')?.remove();
+  if (!awaitListenersBound) {
+    awaitListenersBound = true;
+    ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach((ev) => {
+      window.addEventListener(ev, markAwaitActivity, { passive: true, capture: true });
+    });
+  }
   renderAll();
   updateRouteFromLocation();
   hydrate();
@@ -2557,6 +2601,7 @@ function boot() {
   pollHeartbeat();
   setInterval(pollHeartbeat, 60_000);
   setInterval(checkPauseTimer, 1000);
+  setInterval(checkAwaitTimer, 1000);
 
   workspaceEl.addEventListener('scroll', () => {
     const near = workspaceEl.scrollHeight - workspaceEl.scrollTop - workspaceEl.clientHeight < 60;
@@ -2591,7 +2636,14 @@ function hashToRoute() {
 }
 
 function updateRouteFromLocation() {
-  const hashRoute = hashToRoute();
+  let hashRoute = hashToRoute();
+  if (hashRoute === 'build' && !state.project) {
+    hashRoute = 'idea';
+    const root = location.pathname.endsWith('/')
+      ? location.pathname
+      : location.pathname.slice(0, location.pathname.lastIndexOf('/') + 1);
+    history.replaceState({ route: 'idea' }, '', root + '#/idea');
+  }
   if (hashRoute && hashRoute !== state.route) {
     state.route = hashRoute;
     renderAll();

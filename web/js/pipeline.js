@@ -49,7 +49,8 @@ export function builderSystem() {
 8. 所有按钮必须真实可用：点击后要有可见状态变化（分数、倒计时、文案、面板切换），不能是空函数
 9. 产物控制在 9KB 以内；先保证完整闭合，再接视觉装饰；接近上限时删装饰，绝不能截断
 10. 任何一轮重做都必须保留上一版的 data-acceptance="A1"…"A4"，不得在改写时丢掉
-11. 设计 token 已由外壳注入：优先用 var(--fc-bg) / var(--fc-ink) / var(--fc-accent) / var(--fc-line)，不要另起一套主色；间距落在 4/8 的倍数，圆角最多 2 种，强调色只用于当前主操作
+11. 正文与卡片文字对比度必须 ≥ 4.5:1；禁止浅字压浅底、深灰压灰白渐变，必要时加深文字或换底色
+12. 设计 token 已由外壳注入：优先用 var(--fc-bg) / var(--fc-ink) / var(--fc-accent) / var(--fc-line)，不要另起一套主色；间距落在 4/8 的倍数，圆角最多 2 种，强调色只用于当前主操作
 
 视觉基线（达不到视为未完成）：
 - 顶部用 CSS 变量定义背景 / 表面 / 描边 / 主文字 / 次文字 / 一个强调色，全站复用
@@ -399,8 +400,10 @@ export function inspect(html, spec) {
 
   const buttons = (src.match(/<button\b/gi) || []).length;
   const hasListener = /addeventlistener/i.test(src) || /\son[a-z]+\s*=\s*["']/i.test(src);
-  push('A4', '基础交互', buttons > 0 && hasListener,
-    buttons === 0 ? '没有任何 <button>，用户无法交互' : !hasListener ? '缺少事件监听，按钮点了不会有反应' : `${buttons} 个按钮，事件监听已接`);
+  const staticPage = /单页|名片|海报|朋友圈|展示页|介绍页|落地页|名片页/.test(`${spec?.goal || ''} ${spec?.summary || ''} ${(spec?.acceptance || []).join(' ')}`);
+  const interactionPass = buttons > 0 ? hasListener : staticPage;
+  push('A4', '基础交互', interactionPass,
+    buttons === 0 ? (staticPage ? '静态展示页，无需按钮交互' : '没有任何 <button>，用户无法交互') : !hasListener ? '缺少事件监听，按钮点了不会有反应' : `${buttons} 个按钮，事件监听已接`);
 
   const placeholders = ['TODO', 'lorem ipsum', '[object Object]'].filter((t) => lower.includes(t.toLowerCase()));
   if (/\bundefined\b/.test(src)) placeholders.push('undefined');
@@ -453,6 +456,114 @@ export function inspect(html, spec) {
     defaultBlue ? '出现默认蓝链接色' : times ? '出现 Times New Roman' : '无默认蓝链接、无 Times New Roman');
 
   return { findings, passed: findings.every((f) => f.passed) };
+}
+
+function rgbTuple(value) {
+  const m = String(value || '').match(/rgba?\(([^)]+)\)/i);
+  if (!m) return null;
+  const parts = m[1].split(',').map((x) => Number.parseFloat(x.trim()));
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return null;
+  return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+}
+
+function luminance(rgb) {
+  const f = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * f(rgb.r) + 0.7152 * f(rgb.g) + 0.0722 * f(rgb.b);
+}
+
+function contrastRatio(a, b) {
+  const l1 = luminance(a), l2 = luminance(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+async function auditContrast(html) {
+  if (typeof document === 'undefined' || !document.body) return null;
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-same-origin');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;left:-12000px;top:0;width:1200px;height:900px;border:0;opacity:0;pointer-events:none';
+  const loaded = new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    frame.addEventListener('load', finish, { once: true });
+    setTimeout(finish, 1400);
+  });
+  frame.srcdoc = String(html || '');
+  document.body.append(frame);
+  await loaded;
+  await new Promise((r) => setTimeout(r, 80));
+  const bad = [];
+  let checked = 0;
+  try {
+    const doc = frame.contentDocument;
+    if (!doc || !doc.body) return null;
+    const view = doc.defaultView;
+    const pageBg = rgbTuple(view.getComputedStyle(doc.body).backgroundColor) || { r: 255, g: 255, b: 255, a: 1 };
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode()) && checked < 120) {
+      const text = String(node.nodeValue || '').trim();
+      if (text.length < 2) continue;
+      const el = node.parentElement;
+      if (!el || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(el.tagName)) continue;
+      const style = view.getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      const color = rgbTuple(style.color);
+      const alpha = color?.a ?? 1;
+      if (!color || alpha < 0.5) continue;
+      const size = Number.parseFloat(style.fontSize) || 16;
+      if (size < 10) continue;
+      let bgs = [];
+      let cur = el;
+      while (cur) {
+        const cs = view.getComputedStyle(cur);
+        const img = cs.backgroundImage || '';
+        if (/gradient/i.test(img)) {
+          const stops = [...img.matchAll(/rgba?\([^)]+\)/gi)].map((m) => rgbTuple(m[0])).filter(Boolean);
+          if (stops.length) { bgs = stops; break; }
+        }
+        const bg = rgbTuple(cs.backgroundColor);
+        if (bg && bg.a > 0.55) { bgs = [bg]; break; }
+        if (cur === doc.body) { bgs = [pageBg]; break; }
+        cur = cur.parentElement;
+      }
+      if (!bgs.length) bgs = [pageBg];
+      const minRatio = Math.min(...bgs.map((bg) => contrastRatio(color, bg)));
+      checked += 1;
+      if (minRatio < 4.5) {
+        bad.push({ text: text.slice(0, 22), ratio: minRatio, color: style.color, size });
+      }
+    }
+  } catch (e) {
+    return null;
+  } finally {
+    frame.remove();
+  }
+  return {
+    id: 'A13',
+    check: '文字对比度',
+    passed: bad.length === 0,
+    detail: bad.length === 0
+      ? `已检测 ${checked} 段文字，均达到 4.5:1 对比度`
+      : `对比度不足：${bad.slice(0, 3).map((x) => `「${x.text}」${x.ratio.toFixed(2)}:1`).join('、')}`,
+  };
+}
+
+export async function inspectAsync(html, spec, options = {}) {
+  const report = inspect(html, spec);
+  if (options.contrast !== false) {
+    const extra = await auditContrast(html);
+    if (extra) {
+      report.findings.push(extra);
+      report.passed = report.findings.every((f) => f.passed);
+    }
+  }
+  return report;
 }
 
 export function failedIds(report) {
@@ -709,7 +820,7 @@ export async function advance(p, deps) {
       }
 
       case 'review': {
-        const report = inspect(p.artifact?.html || '', p.spec);
+        const report = await inspectAsync(p.artifact?.html || '', p.spec);
         p.report = { round: p.round, at: Date.now(), findings: report.findings, passed: report.passed };
         const failed = failedIds(report);
         stopAgent(p, 'reviewer', report.passed ? 100 : 92);
@@ -727,6 +838,7 @@ export async function advance(p, deps) {
             p.status = 'AWAITING_USER';
             p.stage = stageOf('AWAITING_USER');
             p.awaitReason = 'decision';
+            p.awaitingAt = Date.now();
             stopAgent(p, 'orch', 70);
             addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `通过版 · ${report.findings.length} 项检查全过`, '等统筹者整理成给你确认的方案');
             addHandoff(p, 'ORCHESTRATOR', 'USER', `选择卡 · ${p.decisions.length} 个方案`, '两个都能用，差别写在方案里');
@@ -745,12 +857,26 @@ export async function advance(p, deps) {
         p.failedIds = failed;
         addHandoff(p, 'REVIEWER', 'BUILDER', `驳回单 · ${failed.length} 项未过`, (report.findings.find((f) => !f.passed)?.detail || '').slice(0, 70));
         const repeated = p.failedHistory.filter((s) => s === sig).length >= 2;
-        if (repeated || p.round >= p.maxRound) {
+        if (p.round >= p.maxRound) {
+          p.knownLimitations = report.findings.filter((f) => !f.passed).map((f) => `${f.id} · ${f.check}：${f.detail}`);
+          p.escalate = false;
+          p.awaitReason = null;
+          p.awaitingAt = 0;
+          p.phase = 'deliver';
+          stopAgent(p, 'orch', 100);
+          addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `降级交付 · ${failed.length} 项未过`, '已到轮次上限，未过项写进已知限制');
+          deps.log('ORCHESTRATOR', `第 ${p.round} 轮仍有 ${failed.length} 项未过，按降级策略交付并标注已知限制`, 'wait');
+          p.updatedAt = Date.now();
+          deps.save();
+          return 'deliver';
+        }
+        if (repeated) {
           p.escalate = true;
           p.phase = 'await';
           p.status = 'AWAITING_USER';
           p.stage = stageOf('AWAITING_USER');
           p.awaitReason = 'escalate';
+          p.awaitingAt = Date.now();
           stopAgent(p, 'orch', 70);
           addHandoff(p, 'REVIEWER', 'ORCHESTRATOR', `诊断单 · ${failed.length} 项未过`, repeated ? '连续两轮同一问题，需要你定方向' : '到轮次上限，需要你定方向');
           addHandoff(p, 'ORCHESTRATOR', 'USER', '诊断卡 · 需要你定方向', '继续修，或先拿到当前这一版');
@@ -781,6 +907,8 @@ export async function advance(p, deps) {
         p.maxRound = 3;
         p.decisionsApplied = true;
         p.escalate = false;
+        p.awaitReason = null;
+        p.awaitingAt = 0;
         p.phase = 'build';
         p.status = 'REWORKING';
         p.stage = stageOf('REWORKING');
