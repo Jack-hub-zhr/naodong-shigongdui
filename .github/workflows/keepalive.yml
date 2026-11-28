@@ -2,8 +2,8 @@ name: keepalive
 
 on:
   schedule:
-    # 07:00–23:59 Asia/Shanghai，每 15 分钟保 API；静态站按访问自然唤醒
-    - cron: '*/15 23,0-15 * * *'
+    # 07:00–23:59 Asia/Shanghai，每 14 分钟保 API；静态站按访问自然唤醒
+    - cron: '*/14 23,0-15 * * *'
   workflow_dispatch:
 
 jobs:
