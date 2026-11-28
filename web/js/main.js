@@ -373,8 +373,9 @@ function agentCard(a, opts = {}) {
   const expanded = ui.expanded.has(a.key);
   const avatarClass = a.state === 'working' || a.state === 'thinking' ? 'hot'
     : a.state === 'done' ? 'ok' : a.state === 'blocked' ? 'wait' : '';
-  const statePill = pill(a.label, a.tone, a.state === 'thinking' || a.state === 'working' ? 'data-breath="1"' : '');
-  return `<button class="agent-card ${opts.mini ? 'mini' : ''} ${opts.focus ? 'focus' : ''}" data-agent="${a.key}" type="button"
+  const busy = ['thinking', 'working', 'reviewing'].includes(a.state);
+  const statePill = pill(a.label, a.tone, busy ? 'data-breath="1"' : '');
+  return `<button class="agent-card ${opts.mini ? 'mini' : ''} ${opts.focus ? 'focus' : ''} ${busy ? 'is-working' : ''}" data-agent="${a.key}" type="button"
       aria-expanded="${expanded}" ${a.state === 'blocked' ? 'data-breath="1"' : ''}>
     <div class="top">
       <div class="agent-avatar ${avatarClass}">${ROLE_ICONS[a.key] || a.letter}</div>

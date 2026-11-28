@@ -2233,3 +2233,24 @@ body { background: var(--canvas); font-size: 15px; }
   }
   .idea-grid .recipe-list.recipes .recipe:last-child { border-bottom: 1px solid var(--line); }
 }
+
+/* 正在作业的成员：卡片外圈呼吸灯，不改变布局、不遮挡内容 */
+.agent-card { position: relative; }
+.agent-card.is-working {
+  border-color: rgba(232, 163, 59, 0.34);
+  animation: agent-breathe 2.8s cubic-bezier(.4, 0, .6, 1) infinite;
+}
+.agent-card.is-working .agent-avatar {
+  animation: avatar-breathe 2.8s cubic-bezier(.4, 0, .6, 1) infinite;
+}
+@keyframes agent-breathe {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(232, 163, 59, 0.06), 0 0 0 rgba(232, 163, 59, 0); }
+  50% { box-shadow: 0 0 0 2px rgba(232, 163, 59, 0.22), 0 0 18px rgba(232, 163, 59, 0.14); }
+}
+@keyframes avatar-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 163, 59, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(232, 163, 59, 0.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-card.is-working, .agent-card.is-working .agent-avatar { animation: none; box-shadow: 0 0 0 2px rgba(232, 163, 59, 0.18); }
+}
